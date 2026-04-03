@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>B3 Stock Analyzer (IA)</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <h1>Análise de Ações da B3 com IA</h1>
+      <p>Ganhe dinheiro com oportunidades na B3 (Powered by Ollama + Yahoo Finance)</p>
+
+      <div class="card">
+        <form id="analyze-form">
+          <input type="text" id="ticker-input" placeholder="Ex: PETR4.SA, VALE3.SA, ITUB4.SA" required />
+          <button type="submit" id="analyze-btn">Analisar</button>
+        </form>
+      </div>
+
+      <div id="loading" class="hidden">
+        <p>Analisando dados com IA... isso pode levar alguns segundos.</p>
+      </div>
+
+      <div id="result" class="hidden">
+        <h2>Resultado para <span id="res-ticker"></span></h2>
+        <div class="stats">
+          <p><strong>Preço:</strong> <span id="res-price"></span></p>
+          <p><strong>Variação:</strong> <span id="res-change"></span>%</p>
+        </div>
+        <div class="analysis-box">
+          <h3>Recomendação da IA:</h3>
+          <p id="res-analysis"></p>
+        </div>
+      </div>
+
+      <div id="error" class="hidden error">
+      </div>
+
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

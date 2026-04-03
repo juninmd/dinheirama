@@ -1,0 +1,17 @@
+{
+  "name": "core",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "hono": "^4.12.10",
+    "ollama": "^0.6.3",
+    "yahoo-finance2": "^3.14.0"
+  }
+}
