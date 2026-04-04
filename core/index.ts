@@ -95,6 +95,63 @@ app.post('/api/analyze', async (c) => {
   }
 })
 
+app.get('/api/portfolio', async (c) => {
+  try {
+    const defaultTickers = ['PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'WEGE3.SA', 'BBAS3.SA', 'BBDC4.SA', 'ELET3.SA', 'RENT3.SA']
+    const quotes = []
+
+    for (const ticker of defaultTickers) {
+      try {
+        const quote = await yahooFinance.quote(ticker)
+        quotes.push({
+          ticker,
+          price: quote.regularMarketPrice,
+          change: quote.regularMarketChangePercent,
+          volume: quote.regularMarketVolume
+        })
+      } catch (e) {
+        console.warn(`Failed to fetch ${ticker}`, e)
+      }
+    }
+
+    const prompt = `
+    Você é um analista financeiro especialista no mercado brasileiro (B3) e um gestor de carteiras experiente focado em maximizar lucros.
+
+    Aqui estão os dados recentes de algumas das principais ações brasileiras:
+    ${quotes.map(q => `- ${q.ticker}: Preço R$${q.price}, Variação ${q.change.toFixed(2)}%, Volume ${q.volume}`).join('\n')}
+
+    Com base APENAS nestes dados de mercado acima (variação e volume) e em seu conhecimento sobre essas empresas sólidas, monte uma recomendação de portfólio diversificado.
+    Diga-me:
+    1. Quais destas ações escolher (recomende umas 3 a 5).
+    2. O peso (porcentagem) de cada uma na carteira.
+    3. Uma breve justificativa para as escolhas focada em potencial de ganho.
+
+    Responda em formato Markdown, em português.
+    `
+
+    let aiResponse = "Ollama is not running locally or failed to connect.";
+    try {
+      const response = await ollama.generate({
+        model: 'llama3',
+        prompt: prompt,
+        stream: false
+      });
+      aiResponse = response.response;
+    } catch (ollamaError: any) {
+      console.warn("Ollama connection failed, returning fallback message:", ollamaError.message);
+    }
+
+    return c.json({
+      portfolio: quotes,
+      recommendation: aiResponse
+    })
+
+  } catch (error: any) {
+    console.error(error);
+    return c.json({ error: error.message }, 500)
+  }
+})
+
 export default {
   port: 3000,
   fetch: app.fetch,

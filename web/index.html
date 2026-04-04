@@ -15,8 +15,10 @@
       <div class="card">
         <form id="analyze-form">
           <input type="text" id="ticker-input" placeholder="Ex: PETR4.SA, VALE3.SA, ITUB4.SA" required />
-          <button type="submit" id="analyze-btn">Analisar</button>
+          <button type="submit" id="analyze-btn">Analisar Ação Única</button>
         </form>
+        <hr style="margin: 20px 0; border: 1px solid #333;" />
+        <button id="generate-portfolio-btn" style="width: 100%;">Gerar Portfólio Recomendado</button>
       </div>
 
       <div id="loading" class="hidden">
@@ -32,6 +34,16 @@
         <div class="analysis-box">
           <h3>Recomendação da IA:</h3>
           <p id="res-analysis"></p>
+        </div>
+      </div>
+
+      <div id="portfolio-result" class="hidden">
+        <h2>Portfólio Recomendado</h2>
+        <div class="stats" id="portfolio-stats">
+        </div>
+        <div class="analysis-box">
+          <h3>Estratégia do Gestor IA:</h3>
+          <p id="portfolio-analysis"></p>
         </div>
       </div>
 

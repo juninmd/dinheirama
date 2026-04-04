@@ -12,6 +12,11 @@ const resPrice = document.getElementById('res-price') as HTMLSpanElement;
 const resChange = document.getElementById('res-change') as HTMLSpanElement;
 const resAnalysis = document.getElementById('res-analysis') as HTMLParagraphElement;
 
+const generatePortfolioBtn = document.getElementById('generate-portfolio-btn') as HTMLButtonElement;
+const portfolioResultDiv = document.getElementById('portfolio-result') as HTMLDivElement;
+const portfolioStats = document.getElementById('portfolio-stats') as HTMLDivElement;
+const portfolioAnalysis = document.getElementById('portfolio-analysis') as HTMLParagraphElement;
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
 
@@ -21,8 +26,10 @@ form.addEventListener('submit', async (e) => {
   // Show loading
   loading.classList.remove('hidden');
   resultDiv.classList.add('hidden');
+  portfolioResultDiv.classList.add('hidden');
   errorDiv.classList.add('hidden');
   btn.disabled = true;
+  generatePortfolioBtn.disabled = true;
 
   try {
     const response = await fetch('http://localhost:3000/api/analyze', {
@@ -56,5 +63,50 @@ form.addEventListener('submit', async (e) => {
   } finally {
     loading.classList.add('hidden');
     btn.disabled = false;
+    generatePortfolioBtn.disabled = false;
+  }
+});
+
+generatePortfolioBtn.addEventListener('click', async () => {
+  // Show loading
+  loading.classList.remove('hidden');
+  resultDiv.classList.add('hidden');
+  portfolioResultDiv.classList.add('hidden');
+  errorDiv.classList.add('hidden');
+  btn.disabled = true;
+  generatePortfolioBtn.disabled = true;
+
+  try {
+    const response = await fetch('http://localhost:3000/api/portfolio', {
+      method: 'GET'
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Erro ao gerar portfólio');
+    }
+
+    // Populate portfolio stats
+    portfolioStats.innerHTML = '';
+    data.portfolio.forEach((stock: any) => {
+      const p = document.createElement('p');
+      p.innerHTML = `<strong>${stock.ticker}</strong>: R$ ${stock.price.toFixed(2)} (${stock.change.toFixed(2)}%)`;
+      portfolioStats.appendChild(p);
+    });
+
+    // Simple parsing for newlines from markdown response
+    portfolioAnalysis.innerHTML = data.recommendation.replace(/\n/g, '<br/>');
+
+    // Show results
+    portfolioResultDiv.classList.remove('hidden');
+
+  } catch (error: any) {
+    errorDiv.textContent = `Erro: ${error.message}`;
+    errorDiv.classList.remove('hidden');
+  } finally {
+    loading.classList.add('hidden');
+    btn.disabled = false;
+    generatePortfolioBtn.disabled = false;
   }
 });
