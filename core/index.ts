@@ -98,27 +98,28 @@ app.post('/api/analyze', async (c) => {
 app.get('/api/portfolio', async (c) => {
   try {
     const defaultTickers = ['PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'WEGE3.SA', 'BBAS3.SA', 'BBDC4.SA', 'ELET3.SA', 'RENT3.SA']
-    const quotes = []
-
-    for (const ticker of defaultTickers) {
-      try {
-        const quote = await yahooFinance.quote(ticker)
-        quotes.push({
-          ticker,
-          price: quote.regularMarketPrice,
-          change: quote.regularMarketChangePercent,
-          volume: quote.regularMarketVolume
-        })
-      } catch (e) {
-        console.warn(`Failed to fetch ${ticker}`, e)
-      }
-    }
+    const quotes = (await Promise.all(
+      defaultTickers.map(async (ticker) => {
+        try {
+          const quote = await yahooFinance.quote(ticker);
+          return {
+            ticker,
+            price: quote.regularMarketPrice,
+            change: quote.regularMarketChangePercent,
+            volume: quote.regularMarketVolume
+          };
+        } catch (e) {
+          console.warn(`Failed to fetch ${ticker}`, e);
+          return null;
+        }
+      })
+    )).filter((q) => q !== null);
 
     const prompt = `
     Você é um analista financeiro especialista no mercado brasileiro (B3) e um gestor de carteiras experiente focado em maximizar lucros.
 
     Aqui estão os dados recentes de algumas das principais ações brasileiras:
-    ${quotes.map(q => `- ${q.ticker}: Preço R$${q.price}, Variação ${q.change.toFixed(2)}%, Volume ${q.volume}`).join('\n')}
+    ${quotes.map(q => `- ${q.ticker}: Preço R$${q.price ?? 'N/A'}, Variação ${q.change?.toFixed(2) ?? 'N/A'}%, Volume ${q.volume ?? 'N/A'}`).join('\n')}
 
     Com base APENAS nestes dados de mercado acima (variação e volume) e em seu conhecimento sobre essas empresas sólidas, monte uma recomendação de portfólio diversificado.
     Diga-me:
