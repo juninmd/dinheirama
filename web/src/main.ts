@@ -91,12 +91,13 @@ generatePortfolioBtn.addEventListener('click', async () => {
     portfolioStats.innerHTML = '';
     data.portfolio.forEach((stock: any) => {
       const p = document.createElement('p');
-      p.innerHTML = `<strong>${stock.ticker}</strong>: R$ ${stock.price.toFixed(2)} (${stock.change.toFixed(2)}%)`;
+      p.innerHTML = `<strong>${stock.ticker}</strong>: R$ ${(stock.price ?? 0).toFixed(2)} (${(stock.change ?? 0).toFixed(2)}%)`;
       portfolioStats.appendChild(p);
     });
 
     // Simple parsing for newlines from markdown response
-    portfolioAnalysis.innerHTML = data.recommendation.replace(/\n/g, '<br/>');
+    portfolioAnalysis.style.whiteSpace = 'pre-wrap';
+    portfolioAnalysis.textContent = data.recommendation;
 
     // Show results
     portfolioResultDiv.classList.remove('hidden');
