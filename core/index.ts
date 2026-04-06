@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import YahooFinance from 'yahoo-finance2'
-const yahooFinance = new YahooFinance()
+const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] })
 import { Ollama } from 'ollama'
 
 const app = new Hono()
@@ -68,7 +68,7 @@ app.post('/api/analyze', async (c) => {
     `
 
     // 4. Query Ollama (assuming 'llama3' or 'mistral' model is available)
-    let aiResponse = "Ollama is not running locally or failed to connect.";
+    let aiResponse = "";
     try {
       const response = await ollama.generate({
         model: 'llama3', // You can change this to mistral or another available model
@@ -78,6 +78,12 @@ app.post('/api/analyze', async (c) => {
       aiResponse = response.response;
     } catch (ollamaError: any) {
       console.warn("Ollama connection failed, returning fallback message:", ollamaError.message);
+      // Fallback mock logic for Ollama
+      if (quote.regularMarketChangePercent && quote.regularMarketChangePercent > 0) {
+        aiResponse = `**Análise Simulada:** A ação ${ticker} apresenta tendência de alta recente (+${quote.regularMarketChangePercent.toFixed(2)}%). É uma boa oportunidade a curto/médio prazo. Justificativa: O volume de ${quote.regularMarketVolume} reforça a pressão compradora e a força do ativo no atual cenário da B3.`;
+      } else {
+        aiResponse = `**Análise Simulada:** A ação ${ticker} apresenta queda recente ou estabilidade (${quote.regularMarketChangePercent?.toFixed(2) || 0}%). Recomenda-se cautela ou aguardar melhor ponto de entrada no curto prazo. Justificativa: O mercado mostra pressão vendedora atual.`;
+      }
     }
 
     return c.json({
@@ -130,7 +136,7 @@ app.get('/api/portfolio', async (c) => {
     Responda em formato Markdown, em português.
     `
 
-    let aiResponse = "Ollama is not running locally or failed to connect.";
+    let aiResponse = "";
     try {
       const response = await ollama.generate({
         model: 'llama3',
@@ -140,6 +146,16 @@ app.get('/api/portfolio', async (c) => {
       aiResponse = response.response;
     } catch (ollamaError: any) {
       console.warn("Ollama connection failed, returning fallback message:", ollamaError.message);
+      // Fallback mock logic for Ollama portfolio
+      const sortedQuotes = [...quotes].sort((a, b) => ((b.change || 0) - (a.change || 0)));
+      const top3 = sortedQuotes.slice(0, 3);
+      aiResponse = `**Recomendação de Portfólio Simulada (Gestor IA):**
+
+1. **${top3[0]?.ticker}** (Peso: 40%) - O ativo com a melhor variação recente. Oferece o maior potencial de alavancagem na carteira.
+2. **${top3[1]?.ticker}** (Peso: 30%) - Excelente força compradora secundária para manter a rentabilidade equilibrada.
+3. **${top3[2]?.ticker}** (Peso: 30%) - Para compor os últimos terços da carteira visando diversificação sem perder foco no ganho.
+
+*Justificativa*: Com base na falta de conexão do LLM local, esta recomendação de emergência seleciona puramente os 3 ativos com maior variação positiva no dia de hoje para priorizar alocação tática no momentum.`;
     }
 
     return c.json({
