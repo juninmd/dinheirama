@@ -80,7 +80,7 @@ app.post('/api/analyze', async (c) => {
       console.warn("Ollama connection failed, returning fallback message:", ollamaError.message);
       // Fallback mock logic for Ollama
       if (quote.regularMarketChangePercent && quote.regularMarketChangePercent > 0) {
-        aiResponse = `**Análise Simulada:** A ação ${ticker} apresenta tendência de alta recente (+${quote.regularMarketChangePercent.toFixed(2)}%). É uma boa oportunidade a curto/médio prazo. Justificativa: O volume de ${quote.regularMarketVolume} reforça a pressão compradora e a força do ativo no atual cenário da B3.`;
+        aiResponse = '**Análise Simulada:** A ação ' + ticker + ' apresenta tendência de alta recente (+' + quote.regularMarketChangePercent.toFixed(2) + '%). É uma boa oportunidade a curto/médio prazo. Justificativa: O volume de ' + (quote.regularMarketVolume ?? 'N/A') + ' reforça a pressão compradora e a força do ativo no atual cenário da B3.';
       } else {
         aiResponse = `**Análise Simulada:** A ação ${ticker} apresenta queda recente ou estabilidade (${quote.regularMarketChangePercent?.toFixed(2) || 0}%). Recomenda-se cautela ou aguardar melhor ponto de entrada no curto prazo. Justificativa: O mercado mostra pressão vendedora atual.`;
       }
