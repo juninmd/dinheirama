@@ -12,6 +12,9 @@ const resPrice = document.getElementById('res-price') as HTMLSpanElement;
 const resChange = document.getElementById('res-change') as HTMLSpanElement;
 const resAnalysis = document.getElementById('res-analysis') as HTMLParagraphElement;
 
+const portfolioForm = document.getElementById('portfolio-form') as HTMLFormElement;
+const riskToleranceInput = document.getElementById('risk-tolerance') as HTMLSelectElement;
+const sectorPreferencesInput = document.getElementById('sector-preferences') as HTMLInputElement;
 const generatePortfolioBtn = document.getElementById('generate-portfolio-btn') as HTMLButtonElement;
 const portfolioResultDiv = document.getElementById('portfolio-result') as HTMLDivElement;
 const portfolioStats = document.getElementById('portfolio-stats') as HTMLDivElement;
@@ -67,7 +70,12 @@ form.addEventListener('submit', async (e) => {
   }
 });
 
-generatePortfolioBtn.addEventListener('click', async () => {
+portfolioForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const riskTolerance = riskToleranceInput.value;
+  const sectorPreferences = sectorPreferencesInput.value.trim();
+
   // Show loading
   loading.classList.remove('hidden');
   resultDiv.classList.add('hidden');
@@ -78,7 +86,11 @@ generatePortfolioBtn.addEventListener('click', async () => {
 
   try {
     const response = await fetch('http://localhost:3000/api/portfolio', {
-      method: 'GET'
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ riskTolerance, sectorPreferences })
     });
 
     const data = await response.json();

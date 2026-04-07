@@ -101,9 +101,24 @@ app.post('/api/analyze', async (c) => {
   }
 })
 
-app.get('/api/portfolio', async (c) => {
+app.post('/api/portfolio', async (c) => {
   try {
-    const defaultTickers = ['PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'WEGE3.SA', 'BBAS3.SA', 'BBDC4.SA', 'ELET3.SA', 'RENT3.SA']
+    let riskTolerance = 'Médio';
+    let sectorPreferences = '';
+
+    try {
+      const body = await c.req.json();
+      if (body.riskTolerance) riskTolerance = body.riskTolerance;
+      if (body.sectorPreferences) sectorPreferences = body.sectorPreferences;
+    } catch (e) {
+      // Body might be empty or invalid json, fallback to defaults
+    }
+
+    const defaultTickers = [
+      'PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'WEGE3.SA', 'BBAS3.SA', 'BBDC4.SA', 'ELET3.SA', 'RENT3.SA', // Traditional
+      'AAPL34.SA', 'MSFT34.SA', 'AMZO34.SA', 'GOGL34.SA', // BDRs (International Tech)
+      'BOVA11.SA', 'IVVB11.SA', 'HASH11.SA' // ETFs (Market, S&P500, Crypto)
+    ]
     const quotes = (await Promise.all(
       defaultTickers.map(async (ticker) => {
         try {
@@ -122,16 +137,21 @@ app.get('/api/portfolio', async (c) => {
     )).filter((q) => q !== null);
 
     const prompt = `
-    Você é um analista financeiro especialista no mercado brasileiro (B3) e um gestor de carteiras experiente focado em maximizar lucros.
+    Você é um analista financeiro especialista no mercado brasileiro (B3) e um gestor de carteiras experiente focado em maximizar lucros através de algoritmos avançados e análises de mercado precisas.
 
-    Aqui estão os dados recentes de algumas das principais ações brasileiras:
+    O cliente tem o seguinte perfil e preferências:
+    - Tolerância ao risco: ${riskTolerance}
+    - Setores preferidos: ${sectorPreferences || 'Diversificado (Nenhuma preferência específica)'}
+
+    Aqui estão os dados em tempo real recentes de alguns dos principais ativos, BDRs internacionais e ETFs disponíveis na B3:
     ${quotes.map(q => `- ${q.ticker}: Preço R$${q.price ?? 'N/A'}, Variação ${q.change?.toFixed(2) ?? 'N/A'}%, Volume ${q.volume ?? 'N/A'}`).join('\n')}
 
-    Com base APENAS nestes dados de mercado acima (variação e volume) e em seu conhecimento sobre essas empresas sólidas, monte uma recomendação de portfólio diversificado.
+    Com base NESTES DADOS (variação e volume), no perfil do cliente (${riskTolerance}), e nas preferências de setor (${sectorPreferences || 'Diversificado'}), crie um portfólio otimizado utilizando seu conhecimento avançado para balancear risco e oportunidade de lucro.
+
     Diga-me:
-    1. Quais destas ações escolher (recomende umas 3 a 5).
-    2. O peso (porcentagem) de cada uma na carteira.
-    3. Uma breve justificativa para as escolhas focada em potencial de ganho.
+    1. Quais destes ativos escolher (recomende de 3 a 5 ativos).
+    2. O peso (porcentagem) ideal de cada um na carteira baseando-se no perfil do cliente.
+    3. Uma justificativa aprofundada focada em como essa escolha se adapta ao mercado atual e maximiza os ganhos do usuário de acordo com suas preferências.
 
     Responda em formato Markdown, em português.
     `

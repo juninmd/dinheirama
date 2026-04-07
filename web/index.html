@@ -18,7 +18,23 @@
           <button type="submit" id="analyze-btn">Analisar Ação Única</button>
         </form>
         <hr style="margin: 20px 0; border: 1px solid #333;" />
-        <button id="generate-portfolio-btn" style="width: 100%;">Gerar Portfólio Recomendado</button>
+
+        <form id="portfolio-form" style="margin-bottom: 20px;">
+          <h3>Personalizar Portfólio</h3>
+          <div style="margin-bottom: 10px;">
+            <label for="risk-tolerance">Tolerância ao Risco:</label>
+            <select id="risk-tolerance" style="width: 100%; padding: 8px; margin-top: 5px;">
+              <option value="Baixo">Baixo (Conservador)</option>
+              <option value="Médio" selected>Médio (Moderado)</option>
+              <option value="Alto">Alto (Agressivo)</option>
+            </select>
+          </div>
+          <div style="margin-bottom: 10px;">
+            <label for="sector-preferences">Setores de Preferência (Opcional):</label>
+            <input type="text" id="sector-preferences" placeholder="Ex: Tecnologia, Energia, Financeiro" style="width: 100%; padding: 8px; margin-top: 5px;" />
+          </div>
+          <button type="submit" id="generate-portfolio-btn" style="width: 100%;">Gerar Portfólio Recomendado</button>
+        </form>
       </div>
 
       <div id="loading" class="hidden">
