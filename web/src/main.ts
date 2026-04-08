@@ -91,7 +91,8 @@ generatePortfolioBtn.addEventListener('click', async () => {
     portfolioStats.innerHTML = '';
     data.portfolio.forEach((stock: any) => {
       const p = document.createElement('p');
-      p.innerHTML = `<strong>${stock.ticker}</strong>: R$ ${(stock.price ?? 0).toFixed(2)} (${(stock.change ?? 0).toFixed(2)}%)`;
+      const histChange = stock.historyChange !== undefined ? stock.historyChange.toFixed(2) : 'N/A';
+      p.innerHTML = `<strong>${stock.ticker}</strong>: R$ ${(stock.price ?? 0).toFixed(2)} (Dia: ${(stock.change ?? 0).toFixed(2)}% | 30D: ${histChange}%)`;
       portfolioStats.appendChild(p);
     });
 
