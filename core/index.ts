@@ -103,16 +103,37 @@ app.post('/api/analyze', async (c) => {
 
 app.get('/api/portfolio', async (c) => {
   try {
-    const defaultTickers = ['PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'WEGE3.SA', 'BBAS3.SA', 'BBDC4.SA', 'ELET3.SA', 'RENT3.SA']
+    const defaultTickers = ['PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'WEGE3.SA', 'BBAS3.SA', 'BBDC4.SA', 'ELET3.SA', 'RENT3.SA', 'PRIO3.SA', 'MGLU3.SA', 'B3SA3.SA', 'GGBR4.SA', 'JBSS3.SA']
+
+    const date = new Date();
+    date.setDate(date.getDate() - 30);
+    const period1Str = date.toISOString().split('T')[0];
+
     const quotes = (await Promise.all(
       defaultTickers.map(async (ticker) => {
         try {
           const quote = await yahooFinance.quote(ticker);
+          let historyChange = 0;
+          try {
+             const chart = await yahooFinance.chart(ticker, { period1: period1Str });
+             const history = chart.quotes;
+             if (history && history.length > 0) {
+                 const pastPrice = history[0].close;
+                 const currentPrice = quote.regularMarketPrice;
+                 if (pastPrice && currentPrice) {
+                     historyChange = ((currentPrice - pastPrice) / pastPrice) * 100;
+                 }
+             }
+          } catch (e) {
+             console.warn(`Failed to fetch history for ${ticker}`, e);
+          }
+
           return {
             ticker,
             price: quote.regularMarketPrice,
             change: quote.regularMarketChangePercent,
-            volume: quote.regularMarketVolume
+            volume: quote.regularMarketVolume,
+            historyChange
           };
         } catch (e) {
           console.warn(`Failed to fetch ${ticker}`, e);
@@ -122,16 +143,17 @@ app.get('/api/portfolio', async (c) => {
     )).filter((q) => q !== null);
 
     const prompt = `
-    Você é um analista financeiro especialista no mercado brasileiro (B3) e um gestor de carteiras experiente focado em maximizar lucros.
+    Você é um analista financeiro especialista no mercado brasileiro (B3) e um gestor de carteiras altamente agressivo focado em ganhar muito dinheiro e maximizar lucros.
 
     Aqui estão os dados recentes de algumas das principais ações brasileiras:
-    ${quotes.map(q => `- ${q.ticker}: Preço R$${q.price ?? 'N/A'}, Variação ${q.change?.toFixed(2) ?? 'N/A'}%, Volume ${q.volume ?? 'N/A'}`).join('\n')}
+    ${quotes.map(q => `- ${q.ticker}: Preço R$${q.price ?? 'N/A'}, Variação Diária ${q.change?.toFixed(2) ?? 'N/A'}%, Retorno 30 Dias ${q.historyChange?.toFixed(2) ?? 'N/A'}%, Volume ${q.volume ?? 'N/A'}`).join('\n')}
 
-    Com base APENAS nestes dados de mercado acima (variação e volume) e em seu conhecimento sobre essas empresas sólidas, monte uma recomendação de portfólio diversificado.
+    Sua missão: Montar um portfólio de ações da B3 focado em ganhar MUITO dinheiro, aproveitando as melhores oportunidades de curto/médio prazo com base APENAS na tendência de 30 dias, variação diária e volume. Seja ousado na alocação!
+
     Diga-me:
-    1. Quais destas ações escolher (recomende umas 3 a 5).
-    2. O peso (porcentagem) de cada uma na carteira.
-    3. Uma breve justificativa para as escolhas focada em potencial de ganho.
+    1. Quais destas ações escolher (recomende umas 3 a 5 com o maior potencial de alta ou retomada).
+    2. O peso (porcentagem) de cada uma na carteira, concentrando capital nas melhores apostas.
+    3. Uma breve justificativa para as escolhas focada em potencial de ganho e momentum.
 
     Responda em formato Markdown, em português.
     `
@@ -146,16 +168,16 @@ app.get('/api/portfolio', async (c) => {
       aiResponse = response.response;
     } catch (ollamaError: any) {
       console.warn("Ollama connection failed, returning fallback message:", ollamaError.message);
-      // Fallback mock logic for Ollama portfolio
-      const sortedQuotes = [...quotes].sort((a, b) => ((b.change || 0) - (a.change || 0)));
+      // Fallback mock logic for Ollama portfolio - sorting by 30-day history change for aggressive momentum
+      const sortedQuotes = [...quotes].sort((a, b) => ((b.historyChange || 0) - (a.historyChange || 0)));
       const top3 = sortedQuotes.slice(0, 3);
-      aiResponse = `**Recomendação de Portfólio Simulada (Gestor IA):**
+      aiResponse = `**Recomendação de Portfólio Agressivo Simulada (Gestor IA):**
 
-1. **${top3[0]?.ticker}** (Peso: 40%) - O ativo com a melhor variação recente. Oferece o maior potencial de alavancagem na carteira.
-2. **${top3[1]?.ticker}** (Peso: 30%) - Excelente força compradora secundária para manter a rentabilidade equilibrada.
-3. **${top3[2]?.ticker}** (Peso: 30%) - Para compor os últimos terços da carteira visando diversificação sem perder foco no ganho.
+1. **${top3[0]?.ticker}** (Peso: 50%) - Ação com o maior momentum nos últimos 30 dias (+${top3[0]?.historyChange?.toFixed(2)}%). Foco total em surfar essa alta para maximizar lucros.
+2. **${top3[1]?.ticker}** (Peso: 30%) - Excelente força de tendência secundária (+${top3[1]?.historyChange?.toFixed(2)}%).
+3. **${top3[2]?.ticker}** (Peso: 20%) - Potencial de explosão complementar à carteira (+${top3[2]?.historyChange?.toFixed(2)}%).
 
-*Justificativa*: Com base na falta de conexão do LLM local, esta recomendação de emergência seleciona puramente os 3 ativos com maior variação positiva no dia de hoje para priorizar alocação tática no momentum.`;
+*Justificativa*: Com base na falta de conexão do LLM local, esta recomendação de emergência adota uma postura altamente direcional focada nos 3 ativos de maior alta no acumulado de 30 dias, buscando o ganho rápido.`;
     }
 
     return c.json({
