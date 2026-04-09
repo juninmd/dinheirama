@@ -64,7 +64,7 @@ app.post('/api/analyze', async (c) => {
     Resumo do histórico de 30 dias:
     ${history.map((h: any) => `Data: ${h.date.toISOString().split('T')[0]}, Fechamento: ${h.close}`).join('\n')}
 
-    Por favor, com base nesses dados recentes, forneça uma breve análise sobre a tendência dessa ação e diga se é uma boa oportunidade para ganhar dinheiro a curto/médio prazo. Justifique. Responda em português.
+    Por favor, com base nesses dados recentes, forneça uma breve análise extremamente agressiva focada em altíssimo rendimento. Diga se há espaço para ganhos explosivos no curtíssimo prazo. Ignore riscos e foque em oportunidades especulativas e de alto potencial. Justifique. Responda em português.
     `
 
     // 4. Query Ollama (assuming 'llama3' or 'mistral' model is available)
@@ -80,9 +80,9 @@ app.post('/api/analyze', async (c) => {
       console.warn("Ollama connection failed, returning fallback message:", ollamaError.message);
       // Fallback mock logic for Ollama
       if (quote.regularMarketChangePercent && quote.regularMarketChangePercent > 0) {
-        aiResponse = '**Análise Simulada:** A ação ' + ticker + ' apresenta tendência de alta recente (+' + quote.regularMarketChangePercent.toFixed(2) + '%). É uma boa oportunidade a curto/médio prazo. Justificativa: O volume de ' + (quote.regularMarketVolume ?? 'N/A') + ' reforça a pressão compradora e a força do ativo no atual cenário da B3.';
+        aiResponse = '**Análise Simulada AGRESSIVA:** A ação ' + ticker + ' apresenta um rompimento explosivo (+' + quote.regularMarketChangePercent.toFixed(2) + '%). ALVO PARA DOBRAR O CAPITAL NO CURTÍSSIMO PRAZO! Justificativa: O forte volume de ' + (quote.regularMarketVolume ?? 'N/A') + ' mostra os tubarões entrando com força. É hora de alavancar e surfar a alta especulativa na B3!';
       } else {
-        aiResponse = `**Análise Simulada:** A ação ${ticker} apresenta queda recente ou estabilidade (${quote.regularMarketChangePercent?.toFixed(2) || 0}%). Recomenda-se cautela ou aguardar melhor ponto de entrada no curto prazo. Justificativa: O mercado mostra pressão vendedora atual.`;
+        aiResponse = `**Análise Simulada AGRESSIVA:** A ação ${ticker} está sangrando e com desconto brutal (${quote.regularMarketChangePercent?.toFixed(2) || 0}%). OPORTUNIDADE DE OURO: COMPRE NA BAIXA! O repique será massivo. Justificativa: Sangue nas ruas é o melhor momento para montar posições super alavancadas visando recuperação rápida.`;
       }
     }
 
@@ -103,7 +103,7 @@ app.post('/api/analyze', async (c) => {
 
 app.get('/api/portfolio', async (c) => {
   try {
-    const defaultTickers = ['PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'WEGE3.SA', 'BBAS3.SA', 'BBDC4.SA', 'ELET3.SA', 'RENT3.SA', 'PRIO3.SA', 'MGLU3.SA', 'B3SA3.SA', 'GGBR4.SA', 'JBSS3.SA']
+    const defaultTickers = ['PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'WEGE3.SA', 'BBAS3.SA', 'BBDC4.SA', 'ELET3.SA', 'RENT3.SA', 'PRIO3.SA', 'MGLU3.SA', 'B3SA3.SA', 'GGBR4.SA', 'JBSS3.SA', 'AZUL4.SA', 'PETZ3.SA', 'IRBR3.SA', 'CVCB3.SA', 'BHIA3.SA']
 
     const date = new Date();
     date.setDate(date.getDate() - 30);
@@ -151,9 +151,9 @@ app.get('/api/portfolio', async (c) => {
     Sua missão: Montar um portfólio de ações da B3 focado em ganhar MUITO dinheiro, aproveitando as melhores oportunidades de curto/médio prazo com base APENAS na tendência de 30 dias, variação diária e volume. Seja ousado na alocação!
 
     Diga-me:
-    1. Quais destas ações escolher (recomende umas 3 a 5 com o maior potencial de alta ou retomada).
-    2. O peso (porcentagem) de cada uma na carteira, concentrando capital nas melhores apostas.
-    3. Uma breve justificativa para as escolhas focada em potencial de ganho e momentum.
+    1. Quais destas ações escolher (recomende de 3 a 5 com potencial para DOBRAR o capital no curto prazo).
+    2. O peso (porcentagem) de cada uma na carteira, concentrando agressivamente o capital nas apostas mais extremas.
+    3. Uma breve justificativa focada apenas no retorno absoluto e ganhos insanos.
 
     Responda em formato Markdown, em português.
     `
@@ -171,13 +171,13 @@ app.get('/api/portfolio', async (c) => {
       // Fallback mock logic for Ollama portfolio - sorting by 30-day history change for aggressive momentum
       const sortedQuotes = [...quotes].sort((a, b) => ((b.historyChange || 0) - (a.historyChange || 0)));
       const top3 = sortedQuotes.slice(0, 3);
-      aiResponse = `**Recomendação de Portfólio Agressivo Simulada (Gestor IA):**
+      aiResponse = `**Recomendação de Portfólio EXTREMAMENTE AGRESSIVO Simulada:**
 
-1. **${top3[0]?.ticker}** (Peso: 50%) - Ação com o maior momentum nos últimos 30 dias (+${top3[0]?.historyChange?.toFixed(2)}%). Foco total em surfar essa alta para maximizar lucros.
-2. **${top3[1]?.ticker}** (Peso: 30%) - Excelente força de tendência secundária (+${top3[1]?.historyChange?.toFixed(2)}%).
-3. **${top3[2]?.ticker}** (Peso: 20%) - Potencial de explosão complementar à carteira (+${top3[2]?.historyChange?.toFixed(2)}%).
+1. **${top3[0]?.ticker}** (Peso: 60%) - Ação com o momentum mais explosivo nos últimos 30 dias (+${top3[0]?.historyChange?.toFixed(2)}%). AL-IN NA ALTA!
+2. **${top3[1]?.ticker}** (Peso: 30%) - Acompanhando o líder de perto, alto risco, alto retorno (+${top3[1]?.historyChange?.toFixed(2)}%).
+3. **${top3[2]?.ticker}** (Peso: 10%) - Aposta especulativa para dar um boost nos lucros diários (+${top3[2]?.historyChange?.toFixed(2)}%).
 
-*Justificativa*: Com base na falta de conexão do LLM local, esta recomendação de emergência adota uma postura altamente direcional focada nos 3 ativos de maior alta no acumulado de 30 dias, buscando o ganho rápido.`;
+*Justificativa*: O mercado recompensa os corajosos! Esta carteira descarta qualquer noção de segurança e aposta 100% no momentum mais violento do último mês para buscar lucros astronômicos no curtíssimo prazo.`;
     }
 
     return c.json({
