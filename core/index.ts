@@ -80,7 +80,7 @@ app.post('/api/analyze', async (c) => {
       console.warn("Ollama connection failed, returning fallback message:", ollamaError.message);
       // Fallback mock logic for Ollama
       if (quote.regularMarketChangePercent && quote.regularMarketChangePercent > 0) {
-        aiResponse = '**Análise Simulada AGRESSIVA:** A ação ' + ticker + ' apresenta um rompimento explosivo (+' + quote.regularMarketChangePercent.toFixed(2) + '%). ALVO PARA DOBRAR O CAPITAL NO CURTÍSSIMO PRAZO! Justificativa: O forte volume de ' + (quote.regularMarketVolume ?? 'N/A') + ' mostra os tubarões entrando com força. É hora de alavancar e surfar a alta especulativa na B3!';
+        aiResponse = `**Análise Simulada AGRESSIVA:** A ação ${ticker} apresenta um rompimento explosivo (+${quote.regularMarketChangePercent.toFixed(2)}%). ALVO PARA DOBRAR O CAPITAL NO CURTÍSSIMO PRAZO! Justificativa: O forte volume de ${quote.regularMarketVolume ?? 'N/A'} mostra os tubarões entrando com força. É hora de alavancar e surfar a alta especulativa na B3!`;
       } else {
         aiResponse = `**Análise Simulada AGRESSIVA:** A ação ${ticker} está sangrando e com desconto brutal (${quote.regularMarketChangePercent?.toFixed(2) || 0}%). OPORTUNIDADE DE OURO: COMPRE NA BAIXA! O repique será massivo. Justificativa: Sangue nas ruas é o melhor momento para montar posições super alavancadas visando recuperação rápida.`;
       }
