@@ -241,6 +241,13 @@ app.get('/api/discover', async (c) => {
     // Filter for "explosive" opportunities: high volume or significant recent change, to reduce payload and focus AI
     const filteredQuotes = quotes.filter(q => (q && (Math.abs(q.historyChange || 0) > 5 || (q.volume || 0) > 10000000)));
 
+    if (filteredQuotes.length === 0) {
+      return c.json({
+        portfolio: [],
+        recommendation: "Nenhuma oportunidade explosiva encontrada no momento com base nos critérios de volume e volatilidade."
+      });
+    }
+
     const prompt = `
     Você é um analista quantitativo e gestor de fundos de altíssimo risco operando na B3.
     Seu objetivo único e exclusivo é MAXIMIZAR O LUCRO NO CURTÍSSIMO PRAZO. Esqueça segurança, dividendos ou longo prazo.
