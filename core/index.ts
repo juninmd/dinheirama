@@ -191,6 +191,97 @@ app.get('/api/portfolio', async (c) => {
   }
 })
 
+app.get('/api/discover', async (c) => {
+  try {
+    const expandedTickers = [
+      'PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'WEGE3.SA', 'BBAS3.SA', 'BBDC4.SA', 'ELET3.SA', 'RENT3.SA', 'PRIO3.SA', 'MGLU3.SA', 'B3SA3.SA', 'GGBR4.SA', 'JBSS3.SA', 'AZUL4.SA', 'PETZ3.SA', 'IRBR3.SA', 'CVCB3.SA', 'BHIA3.SA',
+      'CSNA3.SA', 'USIM5.SA', 'SUZB3.SA', 'KLBN11.SA', 'RADL3.SA', 'LREN3.SA', 'SBSP3.SA', 'CMIG4.SA', 'VIVT3.SA', 'TIMS3.SA', 'HAPV3.SA', 'RDOR3.SA', 'EQTL3.SA', 'ENEV3.SA', 'TOTS3.SA', 'RAIZ4.SA', 'VBBR3.SA'
+    ];
+
+    const date = new Date();
+    date.setDate(date.getDate() - 30);
+    const period1Str = date.toISOString().split('T')[0];
+
+    const quotes = (await Promise.all(
+      expandedTickers.map(async (ticker) => {
+        try {
+          const quote = await yahooFinance.quote(ticker);
+          if (!quote || quote.regularMarketPrice === undefined) {
+             throw new Error(`Quote data incomplete for ${ticker}`);
+          }
+          let historyChange = 0;
+          try {
+             const chart = await yahooFinance.chart(ticker, { period1: period1Str });
+             const history = chart.quotes;
+             if (history && history.length > 0) {
+                 const pastPrice = history[0].close;
+                 const currentPrice = quote.regularMarketPrice;
+                 if (pastPrice && currentPrice) {
+                     historyChange = ((currentPrice - pastPrice) / pastPrice) * 100;
+                 }
+             }
+          } catch (e) {
+             console.warn(`Failed to fetch history for ${ticker}`, e);
+          }
+
+          return {
+            ticker,
+            price: quote.regularMarketPrice,
+            change: quote.regularMarketChangePercent,
+            volume: quote.regularMarketVolume,
+            historyChange
+          };
+        } catch (e) {
+          console.warn(`Failed to fetch ${ticker}`, e);
+          return null;
+        }
+      })
+    )).filter((q) => q !== null);
+
+    // Filter for "explosive" opportunities: high volume or significant recent change, to reduce payload and focus AI
+    const filteredQuotes = quotes.filter(q => (q && (Math.abs(q.historyChange || 0) > 5 || (q.volume || 0) > 10000000)));
+
+    const prompt = `
+    Você é um analista quantitativo e gestor de fundos de altíssimo risco operando na B3.
+    Seu objetivo único e exclusivo é MAXIMIZAR O LUCRO NO CURTÍSSIMO PRAZO. Esqueça segurança, dividendos ou longo prazo.
+
+    Aqui está uma lista filtrada das ações da B3 com maior volatilidade ou volume recente:
+    ${filteredQuotes.map(q => `- ${q?.ticker}: Preço R$${q?.price ?? 'N/A'}, Var Diária ${q?.change?.toFixed(2) ?? 'N/A'}%, Retorno 30D ${q?.historyChange?.toFixed(2) ?? 'N/A'}%, Volume ${q?.volume ?? 'N/A'}`).join('\n')}
+
+    Crie um portfólio "All-In" focado em GANHOS EXPLOSIVOS:
+    1. Escolha as 3 ações com o maior potencial de dar um "porrada" (subida abrupta) nos próximos dias.
+    2. Defina os pesos (ex: 50%, 30%, 20%).
+    3. Justifique tecnicamente com base no momentum e volume, usando linguagem de trader agressivo (ex: "rompimento", "alvo na lua", "short squeeze").
+
+    Responda em formato Markdown, em português.
+    `;
+
+    let aiResponse = "";
+    try {
+      const response = await ollama.generate({
+        model: 'llama3',
+        prompt: prompt,
+        stream: false
+      });
+      aiResponse = response.response;
+    } catch (ollamaError: any) {
+      console.warn("Ollama connection failed, returning fallback message:", ollamaError.message);
+      const sortedQuotes = [...filteredQuotes].sort((a, b) => ((b?.historyChange || 0) - (a?.historyChange || 0)));
+      const top3 = sortedQuotes.slice(0, 3);
+      aiResponse = `**Descoberta de Oportunidades EXPLOSIVAS (Simulado):**\n\n1. **${top3[0]?.ticker}** (Peso: 50%) - Momentum brutal (+${top3[0]?.historyChange?.toFixed(2)}%). Volume explodindo! Alvo na lua!\n2. **${top3[1]?.ticker}** (Peso: 30%) - Gráfico esticado, mas o fluxo comprador não para (+${top3[1]?.historyChange?.toFixed(2)}%).\n3. **${top3[2]?.ticker}** (Peso: 20%) - Trade especulativo. Preparando para o rompimento!\n\n*Nota: O mercado é para os fortes. Opere com stop se for fraco, mas o alvo aqui é o dobro do capital.*`;
+    }
+
+    return c.json({
+      portfolio: filteredQuotes,
+      recommendation: aiResponse
+    });
+
+  } catch (error: any) {
+    console.error(error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
 export default {
   port: 3000,
   fetch: app.fetch,

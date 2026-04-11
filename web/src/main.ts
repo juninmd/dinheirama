@@ -13,6 +13,7 @@ const resChange = document.getElementById('res-change') as HTMLSpanElement;
 const resAnalysis = document.getElementById('res-analysis') as HTMLParagraphElement;
 
 const generatePortfolioBtn = document.getElementById('generate-portfolio-btn') as HTMLButtonElement;
+const discoverBtn = document.getElementById('discover-opportunities-btn') as HTMLButtonElement;
 const portfolioResultDiv = document.getElementById('portfolio-result') as HTMLDivElement;
 const portfolioStats = document.getElementById('portfolio-stats') as HTMLDivElement;
 const portfolioAnalysis = document.getElementById('portfolio-analysis') as HTMLParagraphElement;
@@ -30,6 +31,7 @@ form.addEventListener('submit', async (e) => {
   errorDiv.classList.add('hidden');
   btn.disabled = true;
   generatePortfolioBtn.disabled = true;
+  discoverBtn.disabled = true;
 
   try {
     const response = await fetch('http://localhost:3000/api/analyze', {
@@ -64,6 +66,7 @@ form.addEventListener('submit', async (e) => {
     loading.classList.add('hidden');
     btn.disabled = false;
     generatePortfolioBtn.disabled = false;
+    discoverBtn.disabled = false;
   }
 });
 
@@ -75,6 +78,7 @@ generatePortfolioBtn.addEventListener('click', async () => {
   errorDiv.classList.add('hidden');
   btn.disabled = true;
   generatePortfolioBtn.disabled = true;
+  discoverBtn.disabled = true;
 
   try {
     const response = await fetch('http://localhost:3000/api/portfolio', {
@@ -110,5 +114,54 @@ generatePortfolioBtn.addEventListener('click', async () => {
     loading.classList.add('hidden');
     btn.disabled = false;
     generatePortfolioBtn.disabled = false;
+    discoverBtn.disabled = false;
+  }
+});
+
+discoverBtn.addEventListener('click', async () => {
+  // Show loading
+  loading.classList.remove('hidden');
+  resultDiv.classList.add('hidden');
+  portfolioResultDiv.classList.add('hidden');
+  errorDiv.classList.add('hidden');
+  btn.disabled = true;
+  generatePortfolioBtn.disabled = true;
+  discoverBtn.disabled = true;
+
+  try {
+    const response = await fetch('http://localhost:3000/api/discover', {
+      method: 'GET'
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Erro ao descobrir oportunidades');
+    }
+
+    // Populate portfolio stats (using same div for discovery results)
+    portfolioStats.innerHTML = '';
+    data.portfolio.forEach((stock: any) => {
+      const p = document.createElement('p');
+      const histChange = stock.historyChange !== undefined ? stock.historyChange.toFixed(2) : 'N/A';
+      p.innerHTML = `<strong>${stock.ticker}</strong>: R$ ${(stock.price ?? 0).toFixed(2)} (Vol: ${(stock.volume ?? 0).toLocaleString()} | 30D: ${histChange}%)`;
+      portfolioStats.appendChild(p);
+    });
+
+    // Simple parsing for newlines from markdown response
+    portfolioAnalysis.style.whiteSpace = 'pre-wrap';
+    portfolioAnalysis.textContent = data.recommendation;
+
+    // Show results
+    portfolioResultDiv.classList.remove('hidden');
+
+  } catch (error: any) {
+    errorDiv.textContent = `Erro: ${error.message}`;
+    errorDiv.classList.remove('hidden');
+  } finally {
+    loading.classList.add('hidden');
+    btn.disabled = false;
+    generatePortfolioBtn.disabled = false;
+    discoverBtn.disabled = false;
   }
 });
