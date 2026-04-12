@@ -19,7 +19,7 @@ app.get('/api/quote/:ticker', async (c) => {
   try {
     const quote = await yahooFinance.quote(ticker)
     if (!quote || quote.regularMarketPrice === undefined) {
-      throw new Error('Data not available');
+      return c.json({ error: 'Data not available' }, 404);
     }
     return c.json(quote)
   } catch (error: any) {
@@ -48,7 +48,7 @@ app.post('/api/analyze', async (c) => {
     // 1. Fetch recent stock data
     const quote = await yahooFinance.quote(ticker)
     if (!quote || quote.regularMarketPrice === undefined) {
-      throw new Error('Data not available');
+      return c.json({ error: 'Data not available' }, 404);
     }
 
     // 2. Fetch some historical data (last 30 days roughly)
@@ -120,7 +120,7 @@ app.get('/api/portfolio', async (c) => {
         try {
           const quote = await yahooFinance.quote(ticker);
           if (!quote || quote.regularMarketPrice === undefined) {
-            throw new Error('Data not available');
+            return null;
           }
           let historyChange = 0;
           try {
