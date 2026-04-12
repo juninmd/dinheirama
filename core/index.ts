@@ -18,7 +18,7 @@ app.get('/api/quote/:ticker', async (c) => {
   const ticker = c.req.param('ticker')
   try {
     const quote = await yahooFinance.quote(ticker)
-    if (!quote || quote.regularMarketPrice === undefined) {
+    if (!quote || typeof quote.regularMarketPrice === 'undefined') {
       return c.json({ error: 'Data not available' }, 404);
     }
     return c.json(quote)
@@ -47,7 +47,7 @@ app.post('/api/analyze', async (c) => {
 
     // 1. Fetch recent stock data
     const quote = await yahooFinance.quote(ticker)
-    if (!quote || quote.regularMarketPrice === undefined) {
+    if (!quote || typeof quote.regularMarketPrice === 'undefined') {
       return c.json({ error: 'Data not available' }, 404);
     }
 
@@ -119,7 +119,7 @@ app.get('/api/portfolio', async (c) => {
       defaultTickers.map(async (ticker) => {
         try {
           const quote = await yahooFinance.quote(ticker);
-          if (!quote || quote.regularMarketPrice === undefined) {
+          if (!quote || typeof quote.regularMarketPrice === 'undefined') {
             return null;
           }
           let historyChange = 0;
