@@ -18,7 +18,7 @@ app.get('/api/quote/:ticker', async (c) => {
   const ticker = c.req.param('ticker')
   try {
     // Cast to any to access fields safely since the union type is too broad for direct indexing
-    const quote = await yahooFinance.quote(ticker) as any;
+    const quote = await yahooFinance.quote(ticker) as { regularMarketPrice?: number; [key: string]: any };
     if (!quote || quote.regularMarketPrice === undefined) {
       return c.json({ error: 'Data not found for ticker' }, 404)
     }
@@ -55,10 +55,10 @@ app.post('/api/analyze', async (c) => {
     // 2. Fetch some historical data (last 30 days roughly)
     const date = new Date();
     date.setDate(date.getDate() - 30);
-    const period1Str = date.toISOString().split('T')[0] as string;
+    const period1Str = date.toISOString().split('T')[0]!;
 
     const chart = await yahooFinance.chart(ticker, { period1: period1Str })
-    const history = chart.quotes as any[];
+    const history = chart.quotes;
 
     // 3. Prepare prompt for Ollama
     const prompt = `
@@ -125,12 +125,12 @@ app.get('/api/portfolio', async (c) => {
           }
           let historyChange = 0;
           try {
-             const chart = await yahooFinance.chart(ticker, { period1: period1Str as string });
+             const chart = await yahooFinance.chart(ticker, { period1: period1Str! });
              const history = chart.quotes as any[];
              if (history && history.length > 0) {
                  const pastPrice = history[0].close;
                  const currentPrice = quote.regularMarketPrice;
-                 if (pastPrice !== null && pastPrice !== undefined && currentPrice !== null && currentPrice !== undefined) {
+                 if (pastPrice != null && currentPrice != null) {
                      historyChange = ((currentPrice - pastPrice) / pastPrice) * 100;
                  }
              }
