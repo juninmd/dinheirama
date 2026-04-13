@@ -17,7 +17,11 @@ app.get('/', (c) => {
 app.get('/api/quote/:ticker', async (c) => {
   const ticker = c.req.param('ticker')
   try {
-    const quote = await yahooFinance.quote(ticker)
+    // Cast to any to access fields safely since the union type is too broad for direct indexing
+    const quote = await yahooFinance.quote(ticker) as any;
+    if (!quote || quote.regularMarketPrice === undefined) {
+      return c.json({ error: 'Data not found for ticker' }, 404)
+    }
     return c.json(quote)
   } catch (error: any) {
     return c.json({ error: error.message }, 500)
@@ -43,15 +47,18 @@ app.post('/api/analyze', async (c) => {
     }
 
     // 1. Fetch recent stock data
-    const quote = await yahooFinance.quote(ticker)
+    const quote = await yahooFinance.quote(ticker) as any;
+    if (!quote || quote.regularMarketPrice === undefined) {
+      return c.json({ error: 'Data not found for ticker' }, 404)
+    }
 
     // 2. Fetch some historical data (last 30 days roughly)
     const date = new Date();
     date.setDate(date.getDate() - 30);
-    const period1Str = date.toISOString().split('T')[0];
+    const period1Str = date.toISOString().split('T')[0] as string;
 
     const chart = await yahooFinance.chart(ticker, { period1: period1Str })
-    const history = chart.quotes;
+    const history = chart.quotes as any[];
 
     // 3. Prepare prompt for Ollama
     const prompt = `
@@ -112,15 +119,18 @@ app.get('/api/portfolio', async (c) => {
     const quotes = (await Promise.all(
       defaultTickers.map(async (ticker) => {
         try {
-          const quote = await yahooFinance.quote(ticker);
+          const quote = await yahooFinance.quote(ticker) as any;
+          if (!quote || quote.regularMarketPrice === undefined) {
+            return null;
+          }
           let historyChange = 0;
           try {
-             const chart = await yahooFinance.chart(ticker, { period1: period1Str });
-             const history = chart.quotes;
+             const chart = await yahooFinance.chart(ticker, { period1: period1Str as string });
+             const history = chart.quotes as any[];
              if (history && history.length > 0) {
                  const pastPrice = history[0].close;
                  const currentPrice = quote.regularMarketPrice;
-                 if (pastPrice && currentPrice) {
+                 if (pastPrice !== null && pastPrice !== undefined && currentPrice !== null && currentPrice !== undefined) {
                      historyChange = ((currentPrice - pastPrice) / pastPrice) * 100;
                  }
              }
