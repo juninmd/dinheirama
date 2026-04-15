@@ -225,7 +225,7 @@ app.get('/api/portfolio', async (c) => {
       console.warn("Ollama connection failed, returning fallback message:", ollamaError.message);
       // Fallback mock logic for Ollama portfolio - mixing RSI oversold and high momentum
       const sortedQuotes = [...quotes].sort((a, b) => ((b.historyChange || 0) - (a.historyChange || 0)));
-      const topOversold = [...quotes].filter(q => q.rsi !== null && q.rsi < 35).sort((a, b) => (a.rsi || 100) - (b.rsi || 100))[0];
+      const topOversold = [...quotes].filter(q => q.rsi !== null && q.rsi < 35).sort((a, b) => (a.rsi ?? 100) - (b.rsi ?? 100))[0];
       const topMomentum = sortedQuotes[0];
       const secondMomentum = sortedQuotes[1];
 
