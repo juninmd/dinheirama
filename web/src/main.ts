@@ -10,6 +10,7 @@ const errorDiv = document.getElementById('error') as HTMLDivElement;
 const resTicker = document.getElementById('res-ticker') as HTMLSpanElement;
 const resPrice = document.getElementById('res-price') as HTMLSpanElement;
 const resChange = document.getElementById('res-change') as HTMLSpanElement;
+const resRsi = document.getElementById('res-rsi') as HTMLSpanElement;
 const resAnalysis = document.getElementById('res-analysis') as HTMLParagraphElement;
 
 const generatePortfolioBtn = document.getElementById('generate-portfolio-btn') as HTMLButtonElement;
@@ -50,6 +51,7 @@ form.addEventListener('submit', async (e) => {
     resTicker.textContent = data.ticker;
     resPrice.textContent = `R$ ${data.quote.price.toFixed(2)}`;
     resChange.textContent = data.quote.change.toFixed(2);
+    resRsi.textContent = data.rsi !== null ? data.rsi.toFixed(2) : 'N/A';
 
     // Simple parsing for newlines from markdown response
     resAnalysis.innerHTML = data.analysis.replace(/\n/g, '<br/>');
@@ -91,8 +93,9 @@ generatePortfolioBtn.addEventListener('click', async () => {
     portfolioStats.innerHTML = '';
     data.portfolio.forEach((stock: any) => {
       const p = document.createElement('p');
-      const histChange = stock.historyChange !== undefined ? stock.historyChange.toFixed(2) : 'N/A';
-      p.innerHTML = `<strong>${stock.ticker}</strong>: R$ ${(stock.price ?? 0).toFixed(2)} (Dia: ${(stock.change ?? 0).toFixed(2)}% | 30D: ${histChange}%)`;
+      const histChange = stock.historyChange !== undefined && stock.historyChange !== null ? stock.historyChange.toFixed(2) : 'N/A';
+      const rsiDisplay = stock.rsi !== undefined && stock.rsi !== null ? stock.rsi.toFixed(2) : 'N/A';
+      p.innerHTML = `<strong>${stock.ticker}</strong>: R$ ${(stock.price ?? 0).toFixed(2)} (Dia: ${(stock.change ?? 0).toFixed(2)}% | 30D: ${histChange}% | RSI: ${rsiDisplay})`;
       portfolioStats.appendChild(p);
     });
 

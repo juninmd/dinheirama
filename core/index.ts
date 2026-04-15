@@ -8,6 +8,43 @@ const app = new Hono()
 
 app.use('*', cors())
 
+function calculateRSI(quotes: any[], periods: number = 14): number | null {
+  if (!quotes || quotes.length <= periods) return null;
+
+  let gains = 0;
+  let losses = 0;
+
+  // Calculate initial average gain and loss
+  for (let i = 1; i <= periods; i++) {
+    const diff = quotes[i].close - quotes[i - 1].close;
+    if (diff >= 0) {
+      gains += diff;
+    } else {
+      losses -= diff;
+    }
+  }
+
+  let avgGain = gains / periods;
+  let avgLoss = losses / periods;
+
+  // Calculate smoothed averages for the rest of the periods
+  for (let i = periods + 1; i < quotes.length; i++) {
+    const diff = quotes[i].close - quotes[i - 1].close;
+    if (diff >= 0) {
+      avgGain = (avgGain * (periods - 1) + diff) / periods;
+      avgLoss = (avgLoss * (periods - 1)) / periods;
+    } else {
+      avgGain = (avgGain * (periods - 1)) / periods;
+      avgLoss = (avgLoss * (periods - 1) - diff) / periods;
+    }
+  }
+
+  if (avgLoss === 0) return 100;
+
+  const rs = avgGain / avgLoss;
+  return 100 - (100 / (1 + rs));
+}
+
 const ollama = new Ollama({ host: 'http://127.0.0.1:11434' })
 
 app.get('/', (c) => {
@@ -59,6 +96,7 @@ app.post('/api/analyze', async (c) => {
 
     const chart = await yahooFinance.chart(ticker, { period1: period1Str })
     const history = chart.quotes;
+    const rsi = calculateRSI(history);
 
     // 3. Prepare prompt for Ollama
     const prompt = `
@@ -66,12 +104,13 @@ app.post('/api/analyze', async (c) => {
     Ação: ${ticker}
     Preço Atual: ${quote.regularMarketPrice} ${quote.currency}
     Variação: ${quote.regularMarketChangePercent}%
+    RSI (14 dias): ${rsi !== null ? rsi.toFixed(2) : 'N/A'}
     Volume: ${quote.regularMarketVolume}
 
     Resumo do histórico de 30 dias:
     ${history.map((h: any) => `Data: ${h.date.toISOString().split('T')[0]}, Fechamento: ${h.close}`).join('\n')}
 
-    Por favor, com base nesses dados recentes, forneça uma breve análise extremamente agressiva focada em altíssimo rendimento. Diga se há espaço para ganhos explosivos no curtíssimo prazo. Ignore riscos e foque em oportunidades especulativas e de alto potencial. Justifique. Responda em português.
+    Por favor, com base nesses dados recentes, forneça uma breve análise extremamente agressiva focada em altíssimo rendimento. Diga se há espaço para ganhos explosivos no curtíssimo prazo usando o RSI (RSI < 30 sobrevenda/oportunidade, RSI > 70 forte momentum/tendência). Ignore riscos e foque em oportunidades especulativas e de alto potencial. Justifique. Responda em português.
     `
 
     // 4. Query Ollama (assuming 'llama3' or 'mistral' model is available)
@@ -86,10 +125,12 @@ app.post('/api/analyze', async (c) => {
     } catch (ollamaError: any) {
       console.warn("Ollama connection failed, returning fallback message:", ollamaError.message);
       // Fallback mock logic for Ollama
-      if (quote.regularMarketChangePercent && quote.regularMarketChangePercent > 0) {
-        aiResponse = `**Análise Simulada AGRESSIVA:** A ação ${ticker} apresenta um rompimento explosivo (+${quote.regularMarketChangePercent.toFixed(2)}%). ALVO PARA DOBRAR O CAPITAL NO CURTÍSSIMO PRAZO! Justificativa: O forte volume de ${quote.regularMarketVolume ?? 'N/A'} mostra os tubarões entrando com força. É hora de alavancar e surfar a alta especulativa na B3!`;
+      if (rsi !== null && rsi < 35) {
+        aiResponse = `**Análise Simulada AGRESSIVA:** A ação ${ticker} está em SOBREVENDA EXTREMA (RSI ${rsi.toFixed(2)}). OPORTUNIDADE DE OURO: COMPRE NA BAIXA! A reprecificação será violenta e massiva. Justificativa: Sangue nas ruas é o melhor momento para montar posições super alavancadas visando recuperação rápida.`;
+      } else if (quote.regularMarketChangePercent && quote.regularMarketChangePercent > 0) {
+        aiResponse = `**Análise Simulada AGRESSIVA:** A ação ${ticker} apresenta um rompimento explosivo (+${quote.regularMarketChangePercent.toFixed(2)}%, RSI ${rsi?.toFixed(2) ?? 'N/A'}). ALVO PARA DOBRAR O CAPITAL NO CURTÍSSIMO PRAZO! Justificativa: O forte volume de ${quote.regularMarketVolume ?? 'N/A'} e o RSI confirmam que os tubarões entraram com força. É hora de alavancar e surfar a alta especulativa na B3!`;
       } else {
-        aiResponse = `**Análise Simulada AGRESSIVA:** A ação ${ticker} está sangrando e com desconto brutal (${quote.regularMarketChangePercent?.toFixed(2) || 0}%). OPORTUNIDADE DE OURO: COMPRE NA BAIXA! O repique será massivo. Justificativa: Sangue nas ruas é o melhor momento para montar posições super alavancadas visando recuperação rápida.`;
+        aiResponse = `**Análise Simulada AGRESSIVA:** A ação ${ticker} está retraindo (${quote.regularMarketChangePercent?.toFixed(2) || 0}%, RSI ${rsi?.toFixed(2) ?? 'N/A'}). EXCELENTE PONTO DE ENTRADA. Justificativa: Não deixe a variação diária te assustar, o mercado pune os fracos. Compre o desconto e prepare-se para o rebote insano!`;
       }
     }
 
@@ -99,6 +140,7 @@ app.post('/api/analyze', async (c) => {
         price: quote.regularMarketPrice,
         change: quote.regularMarketChangePercent
       },
+      rsi: rsi,
       analysis: aiResponse
     })
 
@@ -124,6 +166,7 @@ app.get('/api/portfolio', async (c) => {
             return null;
           }
           let historyChange = 0;
+          let rsi = null;
           try {
              const chart = await yahooFinance.chart(ticker, { period1: period1Str! });
              const history = chart.quotes as any[];
@@ -133,6 +176,7 @@ app.get('/api/portfolio', async (c) => {
                  if (pastPrice != null && currentPrice != null) {
                      historyChange = ((currentPrice - pastPrice) / pastPrice) * 100;
                  }
+                 rsi = calculateRSI(history);
              }
           } catch (e) {
              console.warn(`Failed to fetch history for ${ticker}`, e);
@@ -143,7 +187,8 @@ app.get('/api/portfolio', async (c) => {
             price: quote.regularMarketPrice,
             change: quote.regularMarketChangePercent,
             volume: quote.regularMarketVolume,
-            historyChange
+            historyChange,
+            rsi
           };
         } catch (e) {
           console.warn(`Failed to fetch ${ticker}`, e);
@@ -156,9 +201,9 @@ app.get('/api/portfolio', async (c) => {
     Você é um analista financeiro especialista no mercado brasileiro (B3) e um gestor de carteiras altamente agressivo focado em ganhar muito dinheiro e maximizar lucros.
 
     Aqui estão os dados recentes de algumas das principais ações brasileiras:
-    ${quotes.map(q => `- ${q.ticker}: Preço R$${q.price ?? 'N/A'}, Variação Diária ${q.change?.toFixed(2) ?? 'N/A'}%, Retorno 30 Dias ${q.historyChange?.toFixed(2) ?? 'N/A'}%, Volume ${q.volume ?? 'N/A'}`).join('\n')}
+    ${quotes.map(q => `- ${q.ticker}: Preço R$${q.price ?? 'N/A'}, Variação Diária ${q.change?.toFixed(2) ?? 'N/A'}%, Retorno 30 Dias ${q.historyChange?.toFixed(2) ?? 'N/A'}%, RSI 14d ${q.rsi !== null ? q.rsi.toFixed(2) : 'N/A'}, Volume ${q.volume ?? 'N/A'}`).join('\n')}
 
-    Sua missão: Montar um portfólio de ações da B3 focado em ganhar MUITO dinheiro, aproveitando as melhores oportunidades de curto/médio prazo com base APENAS na tendência de 30 dias, variação diária e volume. Seja ousado na alocação!
+    Sua missão: Montar um portfólio de ações da B3 focado em ganhar MUITO dinheiro, aproveitando as melhores oportunidades de curto/médio prazo com base na tendência de 30 dias, variação diária, RSI (RSI < 30 indica sobrevenda e repique, RSI > 70 indica momentum violento) e volume. Seja ousado na alocação!
 
     Diga-me:
     1. Quais destas ações escolher (recomende de 3 a 5 com potencial para DOBRAR o capital no curto prazo).
@@ -178,16 +223,23 @@ app.get('/api/portfolio', async (c) => {
       aiResponse = response.response;
     } catch (ollamaError: any) {
       console.warn("Ollama connection failed, returning fallback message:", ollamaError.message);
-      // Fallback mock logic for Ollama portfolio - sorting by 30-day history change for aggressive momentum
+      // Fallback mock logic for Ollama portfolio - mixing RSI oversold and high momentum
       const sortedQuotes = [...quotes].sort((a, b) => ((b.historyChange || 0) - (a.historyChange || 0)));
-      const top3 = sortedQuotes.slice(0, 3);
-      aiResponse = `**Recomendação de Portfólio EXTREMAMENTE AGRESSIVO Simulada:**
+      const topOversold = [...quotes].filter(q => q.rsi !== null && q.rsi < 35).sort((a, b) => (a.rsi || 100) - (b.rsi || 100))[0];
+      const topMomentum = sortedQuotes[0];
+      const secondMomentum = sortedQuotes[1];
 
-1. **${top3[0]?.ticker}** (Peso: 60%) - Ação com o momentum mais explosivo nos últimos 30 dias (+${top3[0]?.historyChange?.toFixed(2)}%). AL-IN NA ALTA!
-2. **${top3[1]?.ticker}** (Peso: 30%) - Acompanhando o líder de perto, alto risco, alto retorno (+${top3[1]?.historyChange?.toFixed(2)}%).
-3. **${top3[2]?.ticker}** (Peso: 10%) - Aposta especulativa para dar um boost nos lucros diários (+${top3[2]?.historyChange?.toFixed(2)}%).
-
-*Justificativa*: O mercado recompensa os corajosos! Esta carteira descarta qualquer noção de segurança e aposta 100% no momentum mais violento do último mês para buscar lucros astronômicos no curtíssimo prazo.`;
+      aiResponse = `**Recomendação de Portfólio EXTREMAMENTE AGRESSIVO Simulada:**\n\n`;
+      if (topOversold) {
+          aiResponse += `1. **${topOversold.ticker}** (Peso: 50%) - RSI em ${topOversold.rsi?.toFixed(2)} (SOBREVENDA EXTREMA). Faca caindo? Não, é OPORTUNIDADE DE SANGUE! Compre antes do repique explosivo.\n`;
+          aiResponse += `2. **${topMomentum?.ticker}** (Peso: 30%) - Momentum absoluto (+${topMomentum?.historyChange?.toFixed(2)}%). Surfando a euforia dos tubarões, sem medo de altura!\n`;
+          aiResponse += `3. **${secondMomentum?.ticker}** (Peso: 20%) - Acompanhando a alta especulativa (+${secondMomentum?.historyChange?.toFixed(2)}%).\n\n`;
+      } else {
+          aiResponse += `1. **${topMomentum?.ticker}** (Peso: 60%) - Ação com o momentum mais explosivo (+${topMomentum?.historyChange?.toFixed(2)}%). AL-IN NA ALTA!\n`;
+          aiResponse += `2. **${secondMomentum?.ticker}** (Peso: 30%) - Acompanhando o líder, alto risco, alto retorno (+${secondMomentum?.historyChange?.toFixed(2)}%).\n`;
+          aiResponse += `3. **${sortedQuotes[2]?.ticker}** (Peso: 10%) - Aposta especulativa para lucros diários (+${sortedQuotes[2]?.historyChange?.toFixed(2)}%).\n\n`;
+      }
+      aiResponse += `*Justificativa*: O mercado recompensa os corajosos! Usamos RSI e momentum violento para buscar lucros astronômicos no curtíssimo prazo, alavancando pesado.`;
     }
 
     return c.json({
