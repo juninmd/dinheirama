@@ -152,7 +152,7 @@ app.post('/api/analyze', async (c) => {
 
 app.get('/api/portfolio', async (c) => {
   try {
-    const defaultTickers = ['PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'WEGE3.SA', 'BBAS3.SA', 'BBDC4.SA', 'ELET3.SA', 'RENT3.SA', 'PRIO3.SA', 'MGLU3.SA', 'B3SA3.SA', 'GGBR4.SA', 'JBSS3.SA', 'AZUL4.SA', 'PETZ3.SA', 'IRBR3.SA', 'CVCB3.SA', 'BHIA3.SA']
+    const defaultTickers = ['PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'WEGE3.SA', 'BBAS3.SA', 'BBDC4.SA', 'ELET3.SA', 'RENT3.SA', 'PRIO3.SA', 'MGLU3.SA', 'B3SA3.SA', 'GGBR4.SA', 'JBSS3.SA', 'AZUL4.SA', 'PETZ3.SA', 'IRBR3.SA', 'CVCB3.SA', 'BHIA3.SA', 'OIBR3.SA', 'AMER3.SA', 'COGN3.SA', 'CASH3.SA', 'LWSA3.SA']
 
     const date = new Date();
     date.setDate(date.getDate() - 30);
