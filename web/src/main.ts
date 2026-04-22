@@ -33,7 +33,7 @@ form.addEventListener('submit', async (e) => {
   generatePortfolioBtn.disabled = true;
 
   try {
-    const response = await fetch('http://localhost:3000/api/analyze', {
+    const response = await fetch('/api/analyze', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -79,7 +79,7 @@ generatePortfolioBtn.addEventListener('click', async () => {
   generatePortfolioBtn.disabled = true;
 
   try {
-    const response = await fetch('http://localhost:3000/api/portfolio', {
+    const response = await fetch('/api/portfolio', {
       method: 'GET'
     });
 

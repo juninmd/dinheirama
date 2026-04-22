@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { serveStatic } from 'hono/bun'
 import { cors } from 'hono/cors'
 import YahooFinance from 'yahoo-finance2'
 const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] })
@@ -7,6 +8,8 @@ import { Ollama } from 'ollama'
 const app = new Hono()
 
 app.use('*', cors())
+app.use('/*', serveStatic({ root: './public' }))
+app.get('*', serveStatic({ path: './public/index.html' }))
 
 function calculateRSI(quotes: any[], periods: number = 14): number | null {
   if (!quotes || quotes.length <= periods) return null;
@@ -45,7 +48,7 @@ function calculateRSI(quotes: any[], periods: number = 14): number | null {
   return 100 - (100 / (1 + rs));
 }
 
-const ollama = new Ollama({ host: 'http://127.0.0.1:11434' })
+const ollama = new Ollama({ host: 'http://ollama.ai.svc.cluster.local' })
 
 app.get('/', (c) => {
   return c.text('B3 Stock Analyzer API')
