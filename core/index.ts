@@ -48,7 +48,7 @@ function calculateRSI(quotes: any[], periods: number = 14): number | null {
   return 100 - (100 / (1 + rs));
 }
 
-const ollama = new Ollama({ host: 'http://ollama.ai.svc.cluster.local' })
+const ollama = new Ollama({ host: process.env.OLLAMA_HOST || 'http://127.0.0.1:11434' })
 
 app.get('/', (c) => {
   return c.text('B3 Stock Analyzer API')
