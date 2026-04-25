@@ -17,7 +17,6 @@ function calculateRSI(quotes: any[], periods: number = 14): number | null {
   let gains = 0;
   let losses = 0;
 
-  // Calculate initial average gain and loss
   for (let i = 1; i <= periods; i++) {
     const diff = quotes[i].close - quotes[i - 1].close;
     if (diff >= 0) {
@@ -30,7 +29,6 @@ function calculateRSI(quotes: any[], periods: number = 14): number | null {
   let avgGain = gains / periods;
   let avgLoss = losses / periods;
 
-  // Calculate smoothed averages for the rest of the periods
   for (let i = periods + 1; i < quotes.length; i++) {
     const diff = quotes[i].close - quotes[i - 1].close;
     if (diff >= 0) {
@@ -57,7 +55,6 @@ app.get('/', (c) => {
 app.get('/api/quote/:ticker', async (c) => {
   const ticker = c.req.param('ticker')
   try {
-    // Cast to any to access fields safely since the union type is too broad for direct indexing
     const quote = await yahooFinance.quote(ticker) as { regularMarketPrice?: number; [key: string]: any };
     if (!quote || quote.regularMarketPrice === undefined) {
       return c.json({ error: 'Data not found for ticker' }, 404)
@@ -71,7 +68,7 @@ app.get('/api/quote/:ticker', async (c) => {
 app.get('/api/history/:ticker', async (c) => {
   const ticker = c.req.param('ticker')
   try {
-    const queryOptions = { period1: '2023-01-01' } // Fetch from last year for more data
+    const queryOptions = { period1: '2023-01-01' }
     const result = await yahooFinance.historical(ticker, queryOptions)
     return c.json(result)
   } catch (error: any) {
@@ -86,13 +83,11 @@ app.post('/api/analyze', async (c) => {
       return c.json({ error: 'Ticker is required' }, 400)
     }
 
-    // 1. Fetch recent stock data
     const quote = await yahooFinance.quote(ticker) as any;
     if (!quote || quote.regularMarketPrice === undefined) {
       return c.json({ error: 'Data not found for ticker' }, 404)
     }
 
-    // 2. Fetch some historical data (last 30 days roughly)
     const date = new Date();
     date.setDate(date.getDate() - 30);
     const period1Str = date.toISOString().split('T')[0]!;
@@ -101,7 +96,6 @@ app.post('/api/analyze', async (c) => {
     const history = chart.quotes;
     const rsi = calculateRSI(history);
 
-    // 3. Prepare prompt for Ollama
     const prompt = `
     Você é um analista financeiro especialista no mercado brasileiro (B3).
     Ação: ${ticker}
@@ -116,18 +110,16 @@ app.post('/api/analyze', async (c) => {
     Por favor, com base nesses dados recentes, forneça uma breve análise extremamente agressiva focada em altíssimo rendimento. Diga se há espaço para ganhos explosivos no curtíssimo prazo usando o RSI (RSI < 30 sobrevenda/oportunidade, RSI > 70 forte momentum/tendência). Ignore riscos e foque em oportunidades especulativas e de alto potencial. Justifique. Responda em português.
     `
 
-    // 4. Query Ollama (assuming 'llama3' or 'mistral' model is available)
     let aiResponse = "";
     try {
       const response = await ollama.generate({
-        model: 'llama3', // You can change this to mistral or another available model
+        model: 'llama3',
         prompt: prompt,
         stream: false
       });
       aiResponse = response.response;
     } catch (ollamaError: any) {
       console.warn("Ollama connection failed, returning fallback message:", ollamaError.message);
-      // Fallback mock logic for Ollama
       if (rsi !== null && rsi < 35) {
         aiResponse = `**Análise Simulada AGRESSIVA:** A ação ${ticker} está em SOBREVENDA EXTREMA (RSI ${rsi.toFixed(2)}). OPORTUNIDADE DE OURO: COMPRE NA BAIXA! A reprecificação será violenta e massiva. Justificativa: Sangue nas ruas é o melhor momento para montar posições super alavancadas visando recuperação rápida.`;
       } else if (quote.regularMarketChangePercent && quote.regularMarketChangePercent > 0) {
@@ -155,14 +147,24 @@ app.post('/api/analyze', async (c) => {
 
 app.get('/api/portfolio', async (c) => {
   try {
-    const defaultTickers = ['PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'WEGE3.SA', 'BBAS3.SA', 'BBDC4.SA', 'ELET3.SA', 'RENT3.SA', 'PRIO3.SA', 'MGLU3.SA', 'B3SA3.SA', 'GGBR4.SA', 'JBSS3.SA', 'AZUL4.SA', 'PETZ3.SA', 'IRBR3.SA', 'CVCB3.SA', 'BHIA3.SA', 'OIBR3.SA', 'AMER3.SA', 'COGN3.SA', 'CASH3.SA', 'LWSA3.SA']
+    // Para garantir o foco exclusivo no mercado brasileiro (B3) conforme pedido pelo usuário,
+    // usamos uma cesta maior de ações especulativas brasileiras, abrangendo diversos setores,
+    // para atuar como nossa base de triagem dinâmica.
+    const b3Tickers = [
+      'PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'WEGE3.SA', 'BBAS3.SA', 'BBDC4.SA', 'ELET3.SA',
+      'RENT3.SA', 'PRIO3.SA', 'MGLU3.SA', 'B3SA3.SA', 'GGBR4.SA', 'JBSS3.SA', 'AZUL4.SA',
+      'PETZ3.SA', 'IRBR3.SA', 'CVCB3.SA', 'BHIA3.SA', 'OIBR3.SA', 'AMER3.SA', 'COGN3.SA',
+      'CASH3.SA', 'LWSA3.SA', 'TOTS3.SA', 'GOLL4.SA', 'ALPA4.SA', 'CSNA3.SA', 'USIM5.SA',
+      'CMIG4.SA', 'SUZB3.SA', 'KLBN11.SA', 'RADL3.SA', 'HYPE3.SA', 'VIVT3.SA', 'TIMS3.SA',
+      'EQTL3.SA', 'TAEE11.SA', 'TRPL4.SA', 'ENGI11.SA', 'CPLE6.SA'
+    ];
 
     const date = new Date();
     date.setDate(date.getDate() - 30);
     const period1Str = date.toISOString().split('T')[0];
 
     const quotes = (await Promise.all(
-      defaultTickers.map(async (ticker) => {
+      b3Tickers.map(async (ticker) => {
         try {
           const quote = await yahooFinance.quote(ticker) as any;
           if (!quote || quote.regularMarketPrice === undefined) {
@@ -182,7 +184,7 @@ app.get('/api/portfolio', async (c) => {
                  rsi = calculateRSI(history);
              }
           } catch (e) {
-             console.warn(`Failed to fetch history for ${ticker}`, e);
+             console.warn(`Failed to fetch history for ${ticker}`);
           }
 
           return {
@@ -194,7 +196,7 @@ app.get('/api/portfolio', async (c) => {
             rsi
           };
         } catch (e) {
-          console.warn(`Failed to fetch ${ticker}`, e);
+          console.warn(`Failed to fetch ${ticker}`);
           return null;
         }
       })
@@ -203,15 +205,15 @@ app.get('/api/portfolio', async (c) => {
     const prompt = `
     Você é um analista financeiro especialista no mercado brasileiro (B3) e um gestor de carteiras altamente agressivo focado em ganhar muito dinheiro e maximizar lucros.
 
-    Aqui estão os dados recentes de algumas das principais ações brasileiras:
+    Você atua como uma IA de "Screener" dinâmico. Aqui estão os dados recentes de uma grande cesta de ações da B3:
     ${quotes.map(q => `- ${q.ticker}: Preço R$${q.price ?? 'N/A'}, Variação Diária ${q.change?.toFixed(2) ?? 'N/A'}%, Retorno 30 Dias ${q.historyChange?.toFixed(2) ?? 'N/A'}%, RSI 14d ${q.rsi !== null ? q.rsi.toFixed(2) : 'N/A'}, Volume ${q.volume ?? 'N/A'}`).join('\n')}
 
-    Sua missão: Montar um portfólio de ações da B3 focado em ganhar MUITO dinheiro, aproveitando as melhores oportunidades de curto/médio prazo com base na tendência de 30 dias, variação diária, RSI (RSI < 30 indica sobrevenda e repique, RSI > 70 indica momentum violento) e volume. Seja ousado na alocação!
+    Sua missão: Montar um portfólio EXCLUSIVAMENTE de ações da B3 focado em ganhar MUITO dinheiro, aproveitando as melhores oportunidades de curto/médio prazo com base na tendência de 30 dias, variação diária, RSI (RSI < 30 indica sobrevenda e repique, RSI > 70 indica momentum violento).
 
     Diga-me:
-    1. Quais destas ações escolher (recomende de 3 a 5 com potencial para DOBRAR o capital no curto prazo).
-    2. O peso (porcentagem) de cada uma na carteira, concentrando agressivamente o capital nas apostas mais extremas.
-    3. Uma breve justificativa focada apenas no retorno absoluto e ganhos insanos.
+    1. Quais destas ações escolher (recomende de 3 a 5 ações, priorizando ativamente as que tiverem dados extremos, seja o menor RSI ou a maior variação para capturar o momentum e retornos assimétricos).
+    2. O peso (porcentagem) de cada uma na carteira.
+    3. Uma breve justificativa focada apenas no retorno absoluto.
 
     Responda em formato Markdown, em português.
     `
@@ -226,13 +228,12 @@ app.get('/api/portfolio', async (c) => {
       aiResponse = response.response;
     } catch (ollamaError: any) {
       console.warn("Ollama connection failed, returning fallback message:", ollamaError.message);
-      // Fallback mock logic for Ollama portfolio - mixing RSI oversold and high momentum
       const sortedQuotes = [...quotes].sort((a, b) => ((b.historyChange || 0) - (a.historyChange || 0)));
       const topOversold = [...quotes].filter(q => q.rsi !== null && q.rsi < 35).sort((a, b) => (a.rsi ?? 100) - (b.rsi ?? 100))[0];
       const topMomentum = sortedQuotes[0];
       const secondMomentum = sortedQuotes[1];
 
-      aiResponse = `**Recomendação de Portfólio EXTREMAMENTE AGRESSIVO Simulada:**\n\n`;
+      aiResponse = `**Recomendação de Portfólio Dinâmica Simulada da B3 (Screener IA):**\n\n`;
       if (topOversold) {
           aiResponse += `1. **${topOversold.ticker}** (Peso: 50%) - RSI em ${topOversold.rsi?.toFixed(2)} (SOBREVENDA EXTREMA). Faca caindo? Não, é OPORTUNIDADE DE SANGUE! Compre antes do repique explosivo.\n`;
           aiResponse += `2. **${topMomentum?.ticker}** (Peso: 30%) - Momentum absoluto (+${topMomentum?.historyChange?.toFixed(2)}%). Surfando a euforia dos tubarões, sem medo de altura!\n`;
@@ -242,7 +243,7 @@ app.get('/api/portfolio', async (c) => {
           aiResponse += `2. **${secondMomentum?.ticker}** (Peso: 30%) - Acompanhando o líder, alto risco, alto retorno (+${secondMomentum?.historyChange?.toFixed(2)}%).\n`;
           aiResponse += `3. **${sortedQuotes[2]?.ticker}** (Peso: 10%) - Aposta especulativa para lucros diários (+${sortedQuotes[2]?.historyChange?.toFixed(2)}%).\n\n`;
       }
-      aiResponse += `*Justificativa*: O mercado recompensa os corajosos! Usamos RSI e momentum violento para buscar lucros astronômicos no curtíssimo prazo, alavancando pesado.`;
+      aiResponse += `*Justificativa*: A nossa IA filtrou as ações da B3 com maiores e menores variações. Usamos RSI e momentum violento para buscar lucros astronômicos no curtíssimo prazo, alavancando pesado.`;
     }
 
     return c.json({
