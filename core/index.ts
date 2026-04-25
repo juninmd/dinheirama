@@ -184,7 +184,7 @@ app.get('/api/portfolio', async (c) => {
                  rsi = calculateRSI(history);
              }
           } catch (e) {
-             console.warn(`Failed to fetch history for ${ticker}`);
+             console.warn(`Failed to fetch history for ${ticker}`, e);
           }
 
           return {
@@ -196,7 +196,7 @@ app.get('/api/portfolio', async (c) => {
             rsi
           };
         } catch (e) {
-          console.warn(`Failed to fetch ${ticker}`);
+          console.warn(`Failed to fetch ${ticker}`, e);
           return null;
         }
       })
