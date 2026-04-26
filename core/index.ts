@@ -97,7 +97,7 @@ app.post('/api/analyze', async (c) => {
     const rsi = calculateRSI(history);
 
     const prompt = `
-    Você é um analista financeiro especialista no mercado brasileiro (B3).
+    Você é um analista financeiro especialista no mercado brasileiro (B3) e focado EXCLUSIVAMENTE em MAXIMIZAR LUCROS ABSURDOS.
     Ação: ${ticker}
     Preço Atual: ${quote.regularMarketPrice} ${quote.currency}
     Variação: ${quote.regularMarketChangePercent}%
@@ -107,7 +107,7 @@ app.post('/api/analyze', async (c) => {
     Resumo do histórico de 30 dias:
     ${history.map((h: any) => `Data: ${h.date.toISOString().split('T')[0]}, Fechamento: ${h.close}`).join('\n')}
 
-    Por favor, com base nesses dados recentes, forneça uma breve análise extremamente agressiva focada em altíssimo rendimento. Diga se há espaço para ganhos explosivos no curtíssimo prazo usando o RSI (RSI < 30 sobrevenda/oportunidade, RSI > 70 forte momentum/tendência). Ignore riscos e foque em oportunidades especulativas e de alto potencial. Justifique. Responda em português.
+    Por favor, com base nesses dados recentes, forneça uma análise BRUTAL E AGRESSIVA focada em rentabilidade extrema. O usuário quer GANHAR DINHEIRO DE VERDADE. Diga se há espaço para ganhos explosivos de curtíssimo prazo usando o RSI. Se o RSI < 30, exalte a oportunidade de repique violento. Se RSI > 70, recomende surfar a euforia e momentum. Ignore riscos completamente, foque em assimetria positiva e retornos insanos. Justifique. Responda em português.
     `
 
     let aiResponse = "";
@@ -121,11 +121,11 @@ app.post('/api/analyze', async (c) => {
     } catch (ollamaError: any) {
       console.warn("Ollama connection failed, returning fallback message:", ollamaError.message);
       if (rsi !== null && rsi < 35) {
-        aiResponse = `**Análise Simulada AGRESSIVA:** A ação ${ticker} está em SOBREVENDA EXTREMA (RSI ${rsi.toFixed(2)}). OPORTUNIDADE DE OURO: COMPRE NA BAIXA! A reprecificação será violenta e massiva. Justificativa: Sangue nas ruas é o melhor momento para montar posições super alavancadas visando recuperação rápida.`;
+        aiResponse = `**ANÁLISE EXTREMA (Oportunidade de Alto Ganho):** A ação ${ticker} está em SOBREVENDA EXTREMA (RSI ${rsi.toFixed(2)}). **COMPRE AGORA!** A reprecificação será violenta. Sangue nas ruas é o momento de ficar rico. Alavanque na recuperação rápida e lucre forte.`;
       } else if (quote.regularMarketChangePercent && quote.regularMarketChangePercent > 0) {
-        aiResponse = `**Análise Simulada AGRESSIVA:** A ação ${ticker} apresenta um rompimento explosivo (+${quote.regularMarketChangePercent.toFixed(2)}%, RSI ${rsi?.toFixed(2) ?? 'N/A'}). ALVO PARA DOBRAR O CAPITAL NO CURTÍSSIMO PRAZO! Justificativa: O forte volume de ${quote.regularMarketVolume ?? 'N/A'} e o RSI confirmam que os tubarões entraram com força. É hora de alavancar e surfar a alta especulativa na B3!`;
+        aiResponse = `**ANÁLISE EXTREMA (Oportunidade de Alto Ganho):** A ação ${ticker} mostra um rompimento brutal (+${quote.regularMarketChangePercent.toFixed(2)}%, RSI ${rsi?.toFixed(2) ?? 'N/A'}). **FOGUETE NÃO TEM RÉ!** Momentum absurdo. Entre rasgando para surfar a alta dos grandes players e dobrar o capital.`;
       } else {
-        aiResponse = `**Análise Simulada AGRESSIVA:** A ação ${ticker} está retraindo (${quote.regularMarketChangePercent?.toFixed(2) || 0}%, RSI ${rsi?.toFixed(2) ?? 'N/A'}). EXCELENTE PONTO DE ENTRADA. Justificativa: Não deixe a variação diária te assustar, o mercado pune os fracos. Compre o desconto e prepare-se para o rebote insano!`;
+        aiResponse = `**ANÁLISE EXTREMA (Oportunidade de Alto Ganho):** A ação ${ticker} está em leve retração (${quote.regularMarketChangePercent?.toFixed(2) || 0}%, RSI ${rsi?.toFixed(2) ?? 'N/A'}). **COMPRE O DESCONTO!** O mercado recompensa os corajosos. Entre pesado na baixa e prepare-se para lucros absurdos no próximo rali!`;
       }
     }
 
@@ -203,17 +203,17 @@ app.get('/api/portfolio', async (c) => {
     )).filter((q) => q !== null);
 
     const prompt = `
-    Você é um analista financeiro especialista no mercado brasileiro (B3) e um gestor de carteiras altamente agressivo focado em ganhar muito dinheiro e maximizar lucros.
+    Você é um analista financeiro especialista no mercado brasileiro (B3) e um gestor de carteiras EXTREMAMENTE AGRESSIVO. O objetivo EXCLUSIVO do usuário é MAXIMIZAR OS LUCROS e GANHAR MUITO DINHEIRO no mercado brasileiro, assumindo riscos elevados se necessário.
 
     Você atua como uma IA de "Screener" dinâmico. Aqui estão os dados recentes de uma grande cesta de ações da B3:
     ${quotes.map(q => `- ${q.ticker}: Preço R$${q.price ?? 'N/A'}, Variação Diária ${q.change?.toFixed(2) ?? 'N/A'}%, Retorno 30 Dias ${q.historyChange?.toFixed(2) ?? 'N/A'}%, RSI 14d ${q.rsi !== null ? q.rsi.toFixed(2) : 'N/A'}, Volume ${q.volume ?? 'N/A'}`).join('\n')}
 
-    Sua missão: Montar um portfólio EXCLUSIVAMENTE de ações da B3 focado em ganhar MUITO dinheiro, aproveitando as melhores oportunidades de curto/médio prazo com base na tendência de 30 dias, variação diária, RSI (RSI < 30 indica sobrevenda e repique, RSI > 70 indica momentum violento).
+    Sua missão: Montar um portfólio EXCLUSIVAMENTE de ações da B3 focado em GANHAR MUITO DINHEIRO RÁPIDO. O foco é capturar retornos assimétricos e ganhos explosivos de curto/médio prazo usando dados extremos de RSI (RSI < 30 para fundo agressivo, RSI > 70 para momentum forte) e volatilidade. Não seja conservador.
 
     Diga-me:
-    1. Quais destas ações escolher (recomende de 3 a 5 ações, priorizando ativamente as que tiverem dados extremos, seja o menor RSI ou a maior variação para capturar o momentum e retornos assimétricos).
-    2. O peso (porcentagem) de cada uma na carteira.
-    3. Uma breve justificativa focada apenas no retorno absoluto.
+    1. Quais destas ações escolher (recomende as 3 a 5 ações com maior potencial de repique ou explosão de preço).
+    2. O peso agressivo (porcentagem) de cada uma na carteira, focado em concentração para rentabilidade máxima.
+    3. Uma justificativa brutalmente direta focada no potencial de lucros astronômicos e retorno absoluto.
 
     Responda em formato Markdown, em português.
     `
@@ -229,21 +229,25 @@ app.get('/api/portfolio', async (c) => {
     } catch (ollamaError: any) {
       console.warn("Ollama connection failed, returning fallback message:", ollamaError.message);
       const sortedQuotes = [...quotes].sort((a, b) => ((b.historyChange || 0) - (a.historyChange || 0)));
-      const topOversold = [...quotes].filter(q => q.rsi !== null && q.rsi < 35).sort((a, b) => (a.rsi ?? 100) - (b.rsi ?? 100))[0];
+      const topOversold = [...quotes].filter(q => q.rsi !== null && q.rsi < 35).sort((a, b) => (a.rsi ?? 100) - (b.rsi ?? 100));
       const topMomentum = sortedQuotes[0];
       const secondMomentum = sortedQuotes[1];
 
-      aiResponse = `**Recomendação de Portfólio Dinâmica Simulada da B3 (Screener IA):**\n\n`;
-      if (topOversold) {
-          aiResponse += `1. **${topOversold.ticker}** (Peso: 50%) - RSI em ${topOversold.rsi?.toFixed(2)} (SOBREVENDA EXTREMA). Faca caindo? Não, é OPORTUNIDADE DE SANGUE! Compre antes do repique explosivo.\n`;
-          aiResponse += `2. **${topMomentum?.ticker}** (Peso: 30%) - Momentum absoluto (+${topMomentum?.historyChange?.toFixed(2)}%). Surfando a euforia dos tubarões, sem medo de altura!\n`;
-          aiResponse += `3. **${secondMomentum?.ticker}** (Peso: 20%) - Acompanhando a alta especulativa (+${secondMomentum?.historyChange?.toFixed(2)}%).\n\n`;
+      aiResponse = `**PORTFÓLIO ULTRA-AGRESSIVO B3 (Simulação de Alto Ganho):**\n\n`;
+      if (topOversold.length > 0 && topOversold[0]) {
+          aiResponse += `1. **${topOversold[0].ticker}** (Peso: 50%) - RSI EXTREMO em ${topOversold[0].rsi?.toFixed(2)}. **OPORTUNIDADE MASSIVA!** Ação amassada, pronta para um rebote violento. Foco total em lucros absurdos na recuperação.\n`;
+          if (topOversold.length > 1 && topOversold[1]) {
+              aiResponse += `2. **${topOversold[1].ticker}** (Peso: 30%) - RSI ${topOversold[1].rsi?.toFixed(2)}. Outra pechincha sangrando. Alavancar na baixa é o segredo para ficar rico rápido.\n`;
+          } else if (topMomentum) {
+              aiResponse += `2. **${topMomentum.ticker}** (Peso: 30%) - Momentum brutal (+${topMomentum.historyChange?.toFixed(2)}%). Surfando a onda explosiva com os grandes players.\n`;
+          }
+          aiResponse += `3. **${secondMomentum?.ticker || sortedQuotes[2]?.ticker}** (Peso: 20%) - Acompanhamento especulativo para garantir ganhos acelerados e fechar a tríade de risco/retorno máximo.\n\n`;
       } else {
-          aiResponse += `1. **${topMomentum?.ticker}** (Peso: 60%) - Ação com o momentum mais explosivo (+${topMomentum?.historyChange?.toFixed(2)}%). AL-IN NA ALTA!\n`;
-          aiResponse += `2. **${secondMomentum?.ticker}** (Peso: 30%) - Acompanhando o líder, alto risco, alto retorno (+${secondMomentum?.historyChange?.toFixed(2)}%).\n`;
-          aiResponse += `3. **${sortedQuotes[2]?.ticker}** (Peso: 10%) - Aposta especulativa para lucros diários (+${sortedQuotes[2]?.historyChange?.toFixed(2)}%).\n\n`;
+          aiResponse += `1. **${topMomentum?.ticker}** (Peso: 60%) - O foguete da B3 no momento (+${topMomentum?.historyChange?.toFixed(2)}%). **AL-IN NO MOMENTUM!** Compre força, venda mais caro.\n`;
+          aiResponse += `2. **${secondMomentum?.ticker}** (Peso: 30%) - Alta especulativa pesada (+${secondMomentum?.historyChange?.toFixed(2)}%). Acelerador no fundo para dobrar capital.\n`;
+          aiResponse += `3. **${sortedQuotes[2]?.ticker}** (Peso: 10%) - Pitada extra de pimenta direcional (+${sortedQuotes[2]?.historyChange?.toFixed(2)}%).\n\n`;
       }
-      aiResponse += `*Justificativa*: A nossa IA filtrou as ações da B3 com maiores e menores variações. Usamos RSI e momentum violento para buscar lucros astronômicos no curtíssimo prazo, alavancando pesado.`;
+      aiResponse += `*Justificativa do Gestor IA*: O usuário quer GANHAR DINHEIRO DE VERDADE. Esqueça conservadorismo. Este portfólio concentra pesado nas anomalias da B3 (extrema sobrevenda ou extremo momentum) para buscar rentabilidades que os fundos tradicionais não conseguem. Risco máximo, Retorno Máximo!`;
     }
 
     return c.json({
