@@ -12,6 +12,7 @@
   "dependencies": {
     "hono": "^4.12.10",
     "ollama": "^0.6.3",
-    "yahoo-finance2": "^3.14.0"
+    "yahoo-finance2": "^3.14.0",
+    "zod": "^3.23.8"
   }
 }

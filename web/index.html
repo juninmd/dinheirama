@@ -1,57 +1,136 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>B3 Stock Analyzer (IA)</title>
+    <meta name="description" content="Análise de ações da B3 com IA - Ganhe dinheiro identificando oportunidades no mercado brasileiro" />
+    <meta name="theme-color" content="#242424" />
+    <title>Dinheirama - Análise de Ações B3 com IA</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <div id="app">
-      <h1>Análise de Ações da B3 com IA</h1>
-      <p>Ganhe dinheiro com oportunidades na B3 (Powered by Ollama + Yahoo Finance)</p>
+    <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
 
-      <div class="card">
-        <form id="analyze-form">
-          <input type="text" id="ticker-input" placeholder="Ex: PETR4.SA, VALE3.SA, ITUB4.SA" required />
-          <button type="submit" id="analyze-btn">Analisar Ação Única</button>
-        </form>
-        <hr style="margin: 20px 0; border: 1px solid #333;" />
-        <button id="generate-portfolio-btn" style="width: 100%;">Gerar Portfólio Agressivo (Alto Ganho)</button>
-      </div>
-
-      <div id="loading" class="hidden">
-        <p>Analisando dados com IA... isso pode levar alguns segundos.</p>
-      </div>
-
-      <div id="result" class="hidden">
-        <h2>Resultado para <span id="res-ticker"></span></h2>
-        <div class="stats">
-          <p><strong>Preço:</strong> <span id="res-price"></span></p>
-          <p><strong>Variação:</strong> <span id="res-change"></span>%</p>
-          <p><strong>RSI:</strong> <span id="res-rsi"></span></p>
-        </div>
-        <div class="analysis-box">
-          <h3>Recomendação da IA:</h3>
-          <p id="res-analysis"></p>
-        </div>
-      </div>
-
-      <div id="portfolio-result" class="hidden">
-        <h2>Portfólio Recomendado</h2>
-        <div class="stats" id="portfolio-stats">
-        </div>
-        <div class="analysis-box">
-          <h3>Estratégia do Gestor IA:</h3>
-          <p id="portfolio-analysis"></p>
-        </div>
-      </div>
-
-      <div id="error" class="hidden error">
-      </div>
-
+    <div id="network-status" class="hidden network-status">
+      <span>⚠️ Você está offline</span>
     </div>
+
+    <div id="app">
+      <header class="app-header">
+        <div class="header-content">
+          <div class="header-title">
+            <h1>📈 Dinheirama</h1>
+            <p class="subtitle">Análise de Ações da B3 com IA</p>
+          </div>
+          <button id="dark-mode-toggle" class="icon-btn" aria-label="Alternar modo escuro" title="Alternar tema">
+            <span class="theme-icon">🌙</span>
+          </button>
+        </div>
+      </header>
+
+      <main class="main-content">
+        <div class="card">
+          <form id="analyze-form" class="analyze-form">
+            <div class="input-group">
+              <input
+                type="text"
+                id="ticker-input"
+                placeholder="Ex: PETR4.SA, VALE3.SA, ITUB4.SA"
+                autocomplete="off"
+                autocapitalize="characters"
+                spellcheck="false"
+                aria-label="Código da ação"
+              />
+              <button type="submit" id="analyze-btn" class="primary-btn">
+                <span class="btn-icon">🔍</span>
+                Analisar
+              </button>
+            </div>
+            <p class="input-hint">Pressione Ctrl+K para focar</p>
+          </form>
+
+          <div class="divider">
+            <span>ou</span>
+          </div>
+
+          <button id="generate-portfolio-btn" class="secondary-btn">
+            <span class="btn-icon">🚀</span>
+            Gerar Portfólio Agressivo
+          </button>
+        </div>
+
+        <section id="watchlist-container" class="card watchlist hidden">
+          <div class="watchlist-header">
+            <h3>⭐ Minha Watchlist</h3>
+            <span id="watchlist-count" class="watchlist-count">0</span>
+          </div>
+          <ul id="watchlist-list" class="watchlist-list"></ul>
+        </section>
+
+        <div id="loading" class="hidden loading-container">
+          <div class="spinner-container">
+            <div class="spinner"></div>
+            <p class="loading-text">Processando...</p>
+          </div>
+        </div>
+
+        <section id="result" class="card result-card hidden">
+          <div class="result-header">
+            <h2>Resultado: <span id="res-ticker"></span></h2>
+            <div class="result-actions">
+              <span id="res-ai-source" class="ai-badge">🤖 IA</span>
+              <button id="add-to-watchlist-btn" class="icon-btn small" title="Adicionar à watchlist">
+                <span>⭐</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="result-grid">
+            <div class="stat-card">
+              <span class="stat-label">Preço</span>
+              <span id="res-price" class="stat-value">-</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Variação</span>
+              <span id="res-change" class="stat-value">-</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">RSI (14)</span>
+              <span id="res-rsi" class="stat-value">-</span>
+            </div>
+          </div>
+
+          <div class="analysis-box">
+            <h3>📊 Recomendação da IA</h3>
+            <p id="res-analysis" class="analysis-text"></p>
+          </div>
+        </section>
+
+        <section id="portfolio-result" class="card portfolio-card hidden">
+          <div class="result-header">
+            <h2>🎯 Portfólio Recomendado</h2>
+          </div>
+
+          <div id="portfolio-stats" class="portfolio-grid"></div>
+
+          <div class="analysis-box">
+            <h3>📈 Estratégia do Gestor IA</h3>
+            <p id="portfolio-analysis" class="analysis-text"></p>
+          </div>
+        </section>
+
+        <div id="error" class="card error-card hidden" role="alert">
+          <span class="error-icon">⚠️</span>
+          <span id="error-message" class="error-message"></span>
+        </div>
+      </main>
+
+      <footer class="app-footer">
+        <p>Dados: Yahoo Finance • IA: Ollama • Para fins educacionais</p>
+      </footer>
+    </div>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
