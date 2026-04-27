@@ -237,6 +237,9 @@ function setLoading(isLoading: boolean, message = 'Processando...'): void {
     errorDiv.classList.add('hidden')
     btn.disabled = true
     generatePortfolioBtn.disabled = true
+  } else {
+    btn.disabled = false
+    generatePortfolioBtn.disabled = false
   }
 
   const loadingText = isLoading ? message : 'Processando...'
