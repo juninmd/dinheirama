@@ -8,7 +8,7 @@ import { Ollama } from 'ollama'
 
 const app = new Hono()
 
-const tickerSchema = z.string().regex(/^[A-Z]{2,4}\.[A-Z]{2}$/, 'Invalid B3 ticker format (ex: PETR4.SA)')
+const tickerSchema = z.string().regex(/^[A-Z0-9]{4,6}\.[A-Z]{2}$/, 'Invalid B3 ticker format (ex: PETR4.SA)')
 
 interface CacheEntry<T> {
   data: T
@@ -445,7 +445,7 @@ Responda em português, formato Markdown.
       if (sortedByRSI.length > 0) {
         aiResponse += `**🎯 OPORTUNIDADES DE REPIQUE:**\n`
         sortedByRSI.slice(0, 3).forEach((q, i) => {
-          aiResponse += `${i + 1}. **${q.ticker}** - RSI ${q.rsi?.toFixed(2)}, -30D ${q.historyChange?.toFixed(2) || 0}%\n`
+          aiResponse += `${i + 1}. **${q.ticker}** - RSI ${q.rsi?.toFixed(2)}, -30D ${q.historyChange?.toFixed(2) || 0}% - SANGUE NAS RUAS, COMPRE AGORA!\n`
         })
         aiResponse += `\n`
       }
@@ -453,7 +453,7 @@ Responda em português, formato Markdown.
       if (sortedByMomentum.length > 0) {
         aiResponse += `**🚀 MOMENTUM DE ALTA:**\n`
         sortedByMomentum.slice(0, 3).forEach((q, i) => {
-          aiResponse += `${i + 1}. **${q.ticker}** - +${q.historyChange?.toFixed(2) || 0}% (30D)\n`
+          aiResponse += `${i + 1}. **${q.ticker}** - +${q.historyChange?.toFixed(2) || 0}% (30D) - COMPRE O MOMENTUM, SURFE A ALTA!\n`
         })
       }
 
