@@ -94,7 +94,7 @@ function log(level: 'info' | 'warn' | 'error', message: string, data?: Record<st
   console.log(JSON.stringify(logEntry))
 }
 
-const ollama = new Ollama({ host: process.env.OLLAMA_HOST || 'http://ollama.ai.svc.cluster.local' })
+const ollama = new Ollama({ host: process.env.OLLAMA_HOST || 'http://127.0.0.1:11434' })
 
 async function fetchWithTimeout<T>(promise: Promise<T>, timeoutMs = 8000): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined
