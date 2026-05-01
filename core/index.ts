@@ -16,8 +16,8 @@ interface CacheEntry<T> {
 }
 
 class CacheManager {
-  private cache = new Map<string, CacheEntry<unknown>>()
-  private ttl: number
+  private readonly cache = new Map<string, CacheEntry<unknown>>()
+  private readonly ttl: number
 
   constructor(ttlMinutes = 5) {
     this.ttl = ttlMinutes * 60 * 1000
@@ -125,7 +125,7 @@ async function fetchWithRetry<T>(
       }
     }
   }
-  throw lastError!
+  throw lastError
 }
 
 app.use('*', cors())
@@ -163,13 +163,7 @@ app.get('/api/quote/:ticker', async (c) => {
   }
 
   try {
-    const quote = await fetchWithRetry(() => yahooFinance.quote(ticker), 2, 500) as {
-      regularMarketPrice?: number
-      regularMarketChangePercent?: number
-      regularMarketVolume?: number
-      currency?: string
-      [key: string]: any
-    }
+    const quote = await fetchWithRetry(() => yahooFinance.quote(ticker), 2, 500) as Record<string, any>
 
     if (!quote || quote.regularMarketPrice === undefined) {
       return c.json({ error: 'Ticker not found', code: 'NOT_FOUND' }, 404)
@@ -271,7 +265,7 @@ Responda em português, em formato Markdown limpo.
     try {
       const ollamaResponse = await fetchWithTimeout(
         ollama.generate({ model: 'llama3', prompt, stream: false }),
-        20000
+        180000
       )
       aiResponse = ollamaResponse.response
     } catch (ollamaError: any) {
@@ -373,8 +367,8 @@ app.get('/api/portfolio', async (c) => {
             }
             rsi = calculateRSI(history)
           }
-        } catch (e) {
-          log('warn', `History fetch failed for ${ticker}`)
+        } catch (e: any) {
+          log('warn', `History fetch failed for ${ticker}`, { error: e.message })
         }
 
         return {
@@ -386,13 +380,13 @@ app.get('/api/portfolio', async (c) => {
           rsi,
           valid: true
         }
-      } catch (e) {
-        log('warn', `Quote fetch failed for ${ticker}`)
+      } catch (e: any) {
+        log('warn', `Quote fetch failed for ${ticker}`, { error: e.message })
         return null
       }
     }, CONCURRENCY_LIMIT)
 
-    const quotes = quoteResults.filter((q): q is NonNullable<typeof q> => q !== null && q.valid)
+    const quotes = quoteResults.filter((q): q is NonNullable<typeof q> => q !== null && Boolean(q.valid))
 
     log('info', `Portfolio: ${quotes.length}/${B3_TICKERS.length} tickers loaded`)
 
@@ -426,7 +420,7 @@ Responda em português, formato Markdown.
     try {
       const ollamaResponse = await fetchWithTimeout(
         ollama.generate({ model: 'llama3', prompt, stream: false }),
-        30000
+        180000
       )
       aiResponse = ollamaResponse.response
     } catch (ollamaError: any) {
@@ -479,4 +473,5 @@ Responda em português, formato Markdown.
 export default {
   port: 3000,
   fetch: app.fetch,
+  idleTimeout: 240,
 }
