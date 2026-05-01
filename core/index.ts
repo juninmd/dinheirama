@@ -271,7 +271,7 @@ Responda em português, em formato Markdown limpo.
     try {
       const ollamaResponse = await fetchWithTimeout(
         ollama.generate({ model: 'llama3', prompt, stream: false }),
-        20000
+        180000
       )
       aiResponse = ollamaResponse.response
     } catch (ollamaError: any) {
@@ -426,7 +426,7 @@ Responda em português, formato Markdown.
     try {
       const ollamaResponse = await fetchWithTimeout(
         ollama.generate({ model: 'llama3', prompt, stream: false }),
-        30000
+        180000
       )
       aiResponse = ollamaResponse.response
     } catch (ollamaError: any) {
@@ -479,4 +479,5 @@ Responda em português, formato Markdown.
 export default {
   port: 3000,
   fetch: app.fetch,
+  idleTimeout: 240,
 }
