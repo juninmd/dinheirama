@@ -197,6 +197,9 @@ app.get('/api/history/:ticker', async (c) => {
       2,
       500
     )
+    if (!result) {
+       return c.json({ error: 'Failed to fetch history, no result', code: 'HISTORY_ERROR' }, 500)
+    }
     chartCache.set(cacheKey, result)
     return c.json(result)
   } catch (error: any) {
@@ -237,7 +240,7 @@ app.post('/api/analyze', async (c) => {
 
     const chartPromise = yahooFinance.chart(ticker, { period1: period1Str })
     const chart = await fetchWithTimeout(chartPromise, 15000)
-    const history = chart.quotes as any[]
+    const history = (chart?.quotes || []) as any[]
     const rsi = calculateRSI(history)
 
     const prompt = `
@@ -265,7 +268,7 @@ Responda em português, em formato Markdown limpo.
     try {
       const ollamaResponse = await fetchWithTimeout(
         ollama.generate({ model: 'llama3', prompt, stream: false }),
-        180000
+        300000
       )
       aiResponse = ollamaResponse.response
     } catch (ollamaError: any) {
@@ -273,13 +276,13 @@ Responda em português, em formato Markdown limpo.
       aiSource = 'fallback'
 
       if (rsi !== null && rsi < 30) {
-        aiResponse = `**ANÁLISE EXTREMA (Oportunidade de Alto Ganho)**\n\nA ação **${ticker}** está em **SOBREVENDA EXTREMA** (RSI ${rsi.toFixed(2)}).\n\n**COMPRE AGORA!** A reprecificação será violenta. Sangue nas ruas é o momento de ficar rico. Alavanque na recuperação rápida.\n\n*⚠️ Análise automática baseada em RSI (sem IA]*`
+        aiResponse = `**ANÁLISE EXTREMA (Oportunidade de Alto Ganho)**\n\nA ação **${ticker}** está em **SOBREVENDA EXTREMA** (RSI ${rsi.toFixed(2)}).\n\n**COMPRE AGORA!** A reprecificação será violenta. Sangue nas ruas é o momento de ficar rico. Alavanque na recuperação rápida.\n\n*⚠️ Análise automática baseada em RSI (sem IA)*`
       } else if (rsi !== null && rsi > 70) {
-        aiResponse = `**ANÁLISE DE MOMENTUM (Força Irresistível)**\n\nA ação **${ticker}** mostra RSI de ${rsi.toFixed(2)} - sobrecompra extrema mas **o foguete ainda tem combustível!**\n\n**FOGUETE NÃO TEM RÉ!** Momentum absurdo. Entre rasgando para surfar a alta dos grandes players.\n\n*⚠️ Análise automática baseada em RSI (sem IA]*`
+        aiResponse = `**ANÁLISE DE MOMENTUM (Força Irresistível)**\n\nA ação **${ticker}** mostra RSI de ${rsi.toFixed(2)} - sobrecompra extrema mas **o foguete ainda tem combustível!**\n\n**FOGUETE NÃO TEM RÉ!** Momentum absurdo. Entre rasgando para surfar a alta dos grandes players.\n\n*⚠️ Análise automática baseada em RSI (sem IA)*`
       } else if (quote.regularMarketChangePercent > 0) {
-        aiResponse = `**ANÁLISE BULL (Viés Positivo)**\n\n**${ticker}** em alta de +${quote.regularMarketChangePercent.toFixed(2)}% hoje. RSI em ${rsi?.toFixed(2) || 'N/A'} indica espaço para continuidade.\n\n**COMPRE O MOMENTUM!** O mercado recompensa os corajosos.\n\n*⚠️ Análise automática baseada em RSI (sem IA]*`
+        aiResponse = `**ANÁLISE BULL (Viés Positivo)**\n\n**${ticker}** em alta de +${quote.regularMarketChangePercent.toFixed(2)}% hoje. RSI em ${rsi?.toFixed(2) || 'N/A'} indica espaço para continuidade.\n\n**COMPRE O MOMENTUM!** O mercado recompensa os corajosos.\n\n*⚠️ Análise automática baseada em RSI (sem IA)*`
       } else {
-        aiResponse = `**ANÁLISE CONSOLIDAÇÃO (Aguarde Oportunidade)**\n\n**${ticker}** em leve retração de ${quote.regularMarketChangePercent?.toFixed(2) || 0}% (RSI ${rsi?.toFixed(2) || 'N/A'}).\n\nAguarde confirmação de entrada. O mercado é um mercado de probabilidades.\n\n*⚠️ Análise automática baseada em RSI (sem IA]*`
+        aiResponse = `**ANÁLISE DE ACUMULAÇÃO (Oportunidade Silenciosa)**\n\n**${ticker}** está em retração/consolidação de ${quote.regularMarketChangePercent?.toFixed(2) || 0}% (RSI ${rsi?.toFixed(2) || 'N/A'}).\n\n**APROVEITE O DESCONTO!** Compre enquanto os outros dormem e venda na euforia. Maximize lucros com entradas estratégicas.\n\n*⚠️ Análise automática baseada em RSI (sem IA)*`
       }
     }
 
@@ -356,9 +359,9 @@ app.get('/api/portfolio', async (c) => {
             fetchWithRetry(() => yahooFinance.chart(ticker, { period1: period1Str! }), 1, 500),
             10000
           )
-          const history = chart.quotes as any[]
+          const history = (chart?.quotes || []) as any[]
 
-          if (history && history.length > 0) {
+          if (history.length > 0) {
             const pastPrice = history[0]?.close
             const currentPrice = quote.regularMarketPrice
 
@@ -420,7 +423,7 @@ Responda em português, formato Markdown.
     try {
       const ollamaResponse = await fetchWithTimeout(
         ollama.generate({ model: 'llama3', prompt, stream: false }),
-        180000
+        300000
       )
       aiResponse = ollamaResponse.response
     } catch (ollamaError: any) {
@@ -473,5 +476,5 @@ Responda em português, formato Markdown.
 export default {
   port: 3000,
   fetch: app.fetch,
-  idleTimeout: 240,
+  idleTimeout: 255,
 }
