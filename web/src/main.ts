@@ -465,7 +465,7 @@ generatePortfolioBtn.addEventListener('click', async () => {
     return
   }
 
-  setLoading(true, 'Analisando 29 ações da B3...')
+  setLoading(true, 'Analisando ações da B3...')
 
   try {
     const response = await fetchWithRetry('/api/portfolio', {
