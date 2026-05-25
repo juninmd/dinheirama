@@ -237,7 +237,7 @@ app.post('/api/analyze', async (c) => {
 
     const chartPromise = yahooFinance.chart(ticker, { period1: period1Str })
     const chart = await fetchWithTimeout(chartPromise, 15000)
-    const history = chart.quotes as any[]
+    const history = chart?.quotes ? (chart.quotes as any[]) : []
     const rsi = calculateRSI(history)
 
     const prompt = `
@@ -265,7 +265,7 @@ Responda em português, em formato Markdown limpo.
     try {
       const ollamaResponse = await fetchWithTimeout(
         ollama.generate({ model: 'llama3', prompt, stream: false }),
-        180000
+        300000
       )
       aiResponse = ollamaResponse.response
     } catch (ollamaError: any) {
@@ -356,7 +356,7 @@ app.get('/api/portfolio', async (c) => {
             fetchWithRetry(() => yahooFinance.chart(ticker, { period1: period1Str! }), 1, 500),
             10000
           )
-          const history = chart.quotes as any[]
+          const history = chart?.quotes ? (chart.quotes as any[]) : []
 
           if (history && history.length > 0) {
             const pastPrice = history[0]?.close
@@ -420,7 +420,7 @@ Responda em português, formato Markdown.
     try {
       const ollamaResponse = await fetchWithTimeout(
         ollama.generate({ model: 'llama3', prompt, stream: false }),
-        180000
+        300000
       )
       aiResponse = ollamaResponse.response
     } catch (ollamaError: any) {
@@ -473,5 +473,5 @@ Responda em português, formato Markdown.
 export default {
   port: 3000,
   fetch: app.fetch,
-  idleTimeout: 240,
+  idleTimeout: 255,
 }
