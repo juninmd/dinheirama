@@ -13,12 +13,14 @@ function escapeHtml(s: string): string {
 
 function formatMessage(result: Awaited<ReturnType<typeof buildPortfolio>>): string {
   const date = new Date().toLocaleDateString('pt-BR')
-  const ranked = [...result.portfolio].sort((a, b) => b.decision.score - a.decision.score)
+  const ranked = [...result.portfolio].sort((a, b) => (b.historyChange ?? 0) - (a.historyChange ?? 0))
   const top = ranked.slice(0, 5)
 
   const lines = top.map((q) => {
-    const price = q.currency === 'USD' ? `US$ ${q.price?.toFixed(2)}` : `R$ ${q.price?.toFixed(2)}`
-    return `• <b>${q.ticker}</b> — ${q.decision.action.toUpperCase()} (score ${q.decision.score}/100) | ${price}`
+    const price = q.price != null ? `R$ ${q.price.toFixed(2)}` : 'N/A'
+    const chg30 = q.historyChange != null ? `${q.historyChange >= 0 ? '+' : ''}${q.historyChange.toFixed(1)}% 30D` : ''
+    const rsi = q.rsi != null ? ` | RSI ${q.rsi.toFixed(0)}` : ''
+    return `• <b>${q.ticker}</b> — ${price} (${chg30})${rsi}`
   })
 
   return [

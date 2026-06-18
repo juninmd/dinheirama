@@ -237,6 +237,9 @@ function setLoading(isLoading: boolean, message = 'Processando...'): void {
     errorDiv.classList.add('hidden')
     btn.disabled = true
     generatePortfolioBtn.disabled = true
+  } else {
+    btn.disabled = false
+    generatePortfolioBtn.disabled = false
   }
 
   const loadingText = isLoading ? message : 'Processando...'
@@ -462,7 +465,7 @@ generatePortfolioBtn.addEventListener('click', async () => {
     return
   }
 
-  setLoading(true, 'Analisando 29 ações da B3...')
+  setLoading(true, 'Analisando ações da B3...')
 
   try {
     const response = await fetchWithRetry('/api/portfolio', {
