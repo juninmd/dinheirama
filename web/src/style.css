@@ -461,12 +461,17 @@ body {
   font-size: 1.125rem;
   font-weight: 600;
   color: var(--text-primary);
+  overflow-wrap: anywhere;
 }
 
 .analysis-box {
   background: var(--bg-secondary);
   border-radius: 10px;
   padding: 1.25rem;
+}
+
+.analysis-box + .analysis-box {
+  margin-top: 0.75rem;
 }
 
 .analysis-box h3 {
@@ -484,6 +489,26 @@ body {
 
 .analysis-text strong {
   color: var(--accent-primary);
+}
+
+.source-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.source-links a {
+  color: var(--accent-primary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.8125rem;
+  text-decoration: none;
+}
+
+.source-links a:hover {
+  border-color: var(--accent-primary);
 }
 
 .portfolio-grid {
@@ -666,7 +691,7 @@ body {
   }
 
   .result-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .portfolio-grid {

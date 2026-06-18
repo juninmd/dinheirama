@@ -1,20 +1,22 @@
-# 💰 Dinheirama
+# Dinheirama
 
-> Controle financeiro simplificado, moderno e eficiente.
+> Assistente privado para radar de ações brasileiras + Bitcoin.
 
 [![Deployment Status](https://img.shields.io/badge/ArgoCD-Synced-success?style=for-the-badge&logo=argocd)](https://argocd.antonio-code.duckdns.org)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 
-## 📝 Descrição
+## Descrição
 
-O **Dinheirama** é uma plataforma de gestão financeira pessoal projetada para oferecer uma visão clara e objetiva dos seus gastos e ganhos. Com uma interface intuitiva e recursos de análise avançados, ele ajuda você a tomar decisões financeiras mais inteligentes.
+O **Dinheirama** acompanha B3 e Bitcoin, calcula um score local de assimetria, sugere ação operacional (`comprar`, `acompanhar`, `reduzir`), mostra preço de entrada/stop/alvo e aponta fontes para leitura: RI das empresas e pesquisas acadêmicas.
+
+Uso educacional. O app não conhece patrimônio, prazo, imposto ou tolerância a risco do usuário.
 
 ## 🛠️ Tech Stack
 
-- **Frontend**: [React](https://reactjs.org/) + [Vite](https://vitejs.dev/)
+- **Frontend**: TypeScript + Vite
 - **Runtime**: [Bun](https://bun.sh/)
-- **Estilização**: [Tailwind CSS](https://tailwindcss.com/)
-- **Ícones**: [Lucide React](https://lucide.dev/)
+- **Backend**: Hono + Yahoo Finance
+- **IA**: LiteLLM opcional, Ollama como fallback, modelo local v0 como fallback final
 
 ## 🚀 Como Rodar Localmente
 
@@ -28,12 +30,26 @@ O **Dinheirama** é uma plataforma de gestão financeira pessoal projetada para 
    ```
 3. Instale as dependências:
    ```bash
-   bun install
+   cd ../core && bun install
+   cd ../web && bun install
    ```
 4. Inicie o servidor de desenvolvimento:
    ```bash
-   bun dev
+   cd ../web && bun run build
+   cd ../core && bun run index.ts
    ```
+
+## IA
+
+Configure LiteLLM por variáveis de ambiente:
+
+```bash
+LITELLM_API_BASE=https://seu-litellm.example.com
+LITELLM_API_KEY=...
+LITELLM_MODEL=gpt-4o-mini
+```
+
+Sem LiteLLM, o backend tenta `OLLAMA_HOST` + `OLLAMA_MODEL`. Sem ambos, usa o modelo local v0 baseado em preço, RSI, momentum e volatilidade.
 
 ## 📦 Deployment
 

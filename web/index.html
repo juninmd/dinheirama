@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Análise de ações da B3 com IA - Ganhe dinheiro identificando oportunidades no mercado brasileiro" />
+    <meta name="description" content="Assistente de análise para ações brasileiras e Bitcoin com IA, dados de mercado, RI e pesquisa" />
     <meta name="theme-color" content="#242424" />
     <title>Dinheirama - Análise de Ações B3 com IA</title>
     <link rel="stylesheet" href="/src/style.css" />
@@ -56,7 +56,7 @@
 
           <button id="generate-portfolio-btn" class="secondary-btn">
             <span class="btn-icon">🚀</span>
-            Gerar Portfólio Agressivo
+            Gerar Radar B3 + Bitcoin
           </button>
         </div>
 
@@ -99,23 +99,40 @@
               <span class="stat-label">RSI (14)</span>
               <span id="res-rsi" class="stat-value">-</span>
             </div>
+            <div class="stat-card">
+              <span class="stat-label">Decisão</span>
+              <span id="res-action" class="stat-value">-</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Score</span>
+              <span id="res-score" class="stat-value">-</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Entrada / Stop</span>
+              <span id="res-zone" class="stat-value">-</span>
+            </div>
           </div>
 
           <div class="analysis-box">
-            <h3>📊 Recomendação da IA</h3>
+            <h3>📊 Tese e risco</h3>
             <p id="res-analysis" class="analysis-text"></p>
+          </div>
+
+          <div class="analysis-box source-box">
+            <h3>📚 Fontes</h3>
+            <div id="res-sources" class="source-links"></div>
           </div>
         </section>
 
         <section id="portfolio-result" class="card portfolio-card hidden">
           <div class="result-header">
-            <h2>🎯 Portfólio Recomendado</h2>
+            <h2>🎯 Radar Recomendado</h2>
           </div>
 
           <div id="portfolio-stats" class="portfolio-grid"></div>
 
           <div class="analysis-box">
-            <h3>📈 Estratégia do Gestor IA</h3>
+            <h3>📈 Estratégia</h3>
             <p id="portfolio-analysis" class="analysis-text"></p>
           </div>
         </section>
@@ -127,7 +144,7 @@
       </main>
 
       <footer class="app-footer">
-        <p>Dados: Yahoo Finance • IA: Ollama • Para fins educacionais</p>
+        <p>Dados: Yahoo Finance • IA: LiteLLM/Ollama • Para fins educacionais</p>
       </footer>
     </div>
 

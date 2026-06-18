@@ -18,6 +18,18 @@ interface AnalyzeResponse {
   ticker: string
   quote: { price: number; change: number; volume?: number; currency?: string }
   rsi: number | null
+  decision: {
+    action: 'comprar' | 'acompanhar' | 'reduzir'
+    score: number
+    confidence: 'baixa' | 'media' | 'alta'
+    fairZone: { entry: number; stop: number; target: number }
+    reasons: string[]
+    risks: string[]
+  }
+  sources: {
+    investorRelations: string | null
+    papers: Array<{ title: string; url: string }>
+  }
   analysis: string
   aiSource: string
   timestamp: string
@@ -28,8 +40,10 @@ interface PortfolioResponse {
     ticker: string
     price: number
     change: number
+    currency?: string
     historyChange: number
     rsi: number | null
+    decision: AnalyzeResponse['decision']
   }>
   recommendation: string
   aiSource: string
@@ -256,9 +270,10 @@ function hideAllResults(): void {
   loading.classList.add('hidden')
 }
 
-function formatPrice(value: number | undefined | null, decimals = 2): string {
+function formatPrice(value: number | undefined | null, decimals = 2, currency = 'BRL'): string {
   if (value == null) return 'N/A'
-  return `R$ ${value.toFixed(decimals)}`
+  const prefix = currency === 'USD' ? 'US$' : 'R$'
+  return `${prefix} ${value.toFixed(decimals)}`
 }
 
 function formatPercent(value: number | undefined | null, decimals = 2): string {
@@ -279,28 +294,61 @@ function getChangeColor(change: number | undefined | null): string {
   return 'var(--danger)'
 }
 
+function getActionColor(action: AnalyzeResponse['decision']['action']): string {
+  if (action === 'comprar') return 'var(--success)'
+  if (action === 'reduzir') return 'var(--danger)'
+  return 'var(--warning)'
+}
+
+function getScoreColor(score: number): string {
+  if (score >= 68) return 'var(--success)'
+  if (score <= 38) return 'var(--danger)'
+  return 'var(--warning)'
+}
+
 function renderAnalysisResult(data: AnalyzeResponse): void {
   const resTicker = $<HTMLSpanElement>('res-ticker')
   const resPrice = $<HTMLSpanElement>('res-price')
   const resChange = $<HTMLSpanElement>('res-change')
   const resRsi = $<HTMLSpanElement>('res-rsi')
+  const resAction = $<HTMLSpanElement>('res-action')
+  const resScore = $<HTMLSpanElement>('res-score')
+  const resZone = $<HTMLSpanElement>('res-zone')
   const resAnalysis = $<HTMLParagraphElement>('res-analysis')
   const resAiSource = $<HTMLSpanElement>('res-ai-source')
+  const resSources = $<HTMLDivElement>('res-sources')
   const addToWatchlistBtn = $<HTMLButtonElement>('add-to-watchlist-btn')
 
   resTicker.textContent = data.ticker
-  resPrice.textContent = formatPrice(data.quote.price)
+  resPrice.textContent = formatPrice(data.quote.price, 2, data.quote.currency)
   resChange.textContent = formatPercent(data.quote.change)
   resChange.style.color = getChangeColor(data.quote.change)
   resRsi.textContent = data.rsi !== null ? data.rsi.toFixed(2) : 'N/A'
   resRsi.style.color = getRSIColor(data.rsi)
+  resAction.textContent = data.decision.action.toUpperCase()
+  resAction.style.color = getActionColor(data.decision.action)
+  resScore.textContent = `${data.decision.score}/100`
+  resScore.style.color = getScoreColor(data.decision.score)
+  resZone.textContent = `${formatPrice(data.decision.fairZone.entry, 2, data.quote.currency)} / ${formatPrice(data.decision.fairZone.stop, 2, data.quote.currency)}`
 
   resAnalysis.innerHTML = data.analysis
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/\n/g, '<br/>')
 
   if (resAiSource) {
-    resAiSource.textContent = data.aiSource === 'ollama' ? '🤖 IA' : '📊 Automático'
+    resAiSource.textContent = data.aiSource === 'local-model-v0' ? '📊 Modelo v0' : `🤖 ${data.aiSource}`
+  }
+
+  if (resSources) {
+    const irLink = data.sources.investorRelations
+      ? `<a href="${data.sources.investorRelations}" target="_blank" rel="noreferrer">RI</a>`
+      : ''
+    const paperLinks = data.sources.papers
+      .slice(0, 3)
+      .map((paper, index) => `<a href="${paper.url}" target="_blank" rel="noreferrer">Pesquisa ${index + 1}</a>`)
+      .join('')
+
+    resSources.innerHTML = `${irLink}${paperLinks}`
   }
 
   if (addToWatchlistBtn) {
@@ -325,12 +373,13 @@ function renderPortfolioResult(data: PortfolioResponse): void {
     div.innerHTML = `
       <div class="portfolio-stock-header">
         <span class="portfolio-stock-ticker">${stock.ticker}</span>
-        <span class="portfolio-stock-price">${formatPrice(stock.price)}</span>
+        <span class="portfolio-stock-price">${formatPrice(stock.price, 2, stock.currency)}</span>
       </div>
       <div class="portfolio-stock-stats">
         <span style="color: ${getChangeColor(stock.change)}">${formatPercent(stock.change)}</span>
         <span style="color: ${getChangeColor(stock.historyChange)}">30D: ${formatPercent(stock.historyChange)}</span>
-        <span style="color: ${getRSIColor(stock.rsi)}">RSI: ${stock.rsi?.toFixed(0) || 'N/A'}</span>
+        <span style="color: ${getActionColor(stock.decision.action)}">${stock.decision.action}</span>
+        <span style="color: ${getScoreColor(stock.decision.score)}">${stock.decision.score}/100</span>
       </div>
     `
     portfolioStats.appendChild(div)
@@ -351,7 +400,7 @@ function showError(message: string, code?: string): void {
   } else if (code === 'TIMEOUT') {
     displayMessage = 'Tempo esgotado. Tente novamente.'
   } else if (code === 'INVALID_TICKER') {
-    displayMessage = 'Ticker inválido. Use formato: PETR4.SA, VALE3.SA'
+    displayMessage = 'Ticker inválido. Use: PETR4, PETR4.SA, VALE3.SA ou BTC'
   } else if (code === 'NOT_FOUND') {
     displayMessage = 'Ação não encontrada. Verifique o ticker.'
   }
@@ -425,7 +474,7 @@ form.addEventListener('submit', async (e) => {
     return
   }
 
-  setLoading(true, 'Analisando ação com IA...')
+  setLoading(true, 'Analisando ativo com IA...')
 
   try {
     const response = await fetchWithRetry('/api/analyze', {
@@ -462,7 +511,7 @@ generatePortfolioBtn.addEventListener('click', async () => {
     return
   }
 
-  setLoading(true, 'Analisando 29 ações da B3...')
+  setLoading(true, 'Analisando B3 + Bitcoin...')
 
   try {
     const response = await fetchWithRetry('/api/portfolio', {
