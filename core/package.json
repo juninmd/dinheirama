@@ -5,13 +5,16 @@
   "private": true,
   "scripts": {
     "start": "bun run index.ts",
-    "notify": "bun run telegram-daily.ts"
+    "notify": "bun run telegram-daily.ts",
+    "collect": "bun run training/collector.ts",
+    "train": "python3 training/trainer.py",
+    "train:all": "bun run collect && python3 training/trainer.py"
   },
   "devDependencies": {
     "@types/bun": "latest"
   },
   "peerDependencies": {
-    "typescript": "^5"
+    "typescript": "^6.0.3"
   },
   "dependencies": {
     "hono": "^4.12.10",

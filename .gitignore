@@ -65,6 +65,11 @@ web_modules/
 # Yarn Integrity file
 .yarn-integrity
 
+# Training data and models
+/data/training/
+/data/models/
+*.jsonl
+
 # dotenv environment variable files
 .env
 .env.*
