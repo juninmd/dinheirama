@@ -681,6 +681,39 @@ app.get('/api/portfolio', async (c) => {
   }
 })
 
+// Agendador diario do envio da carteira ao Telegram (roda no servidor 24/7).
+// NOTIFY_UTC_HOUR define a hora UTC (default 11 = 08h BRT). Desativa sem TELEGRAM_*.
+function msUntilNextRun(utcHour: number): number {
+  const now = new Date()
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), utcHour, 0, 0, 0))
+  if (next.getTime() <= now.getTime()) next.setUTCDate(next.getUTCDate() + 1)
+  return next.getTime() - now.getTime()
+}
+
+async function scheduleDailyNotify(): Promise<void> {
+  if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_CHAT_ID) {
+    log('info', 'Daily Telegram notify disabled (no TELEGRAM_* env)')
+    return
+  }
+  const utcHour = Number(process.env.NOTIFY_UTC_HOUR ?? 11)
+  const { sendDailyPortfolio } = await import('./telegram-daily.ts')
+  const run = async () => {
+    try {
+      await sendDailyPortfolio()
+      log('info', 'Daily Telegram notify sent')
+    } catch (error: any) {
+      log('error', 'Daily Telegram notify failed', { error: error.message })
+    }
+    setTimeout(run, msUntilNextRun(utcHour))
+  }
+  setTimeout(run, msUntilNextRun(utcHour))
+  log('info', 'Daily Telegram notify scheduled', { utcHour })
+}
+
+if (import.meta.main) {
+  void scheduleDailyNotify()
+}
+
 export default {
   port: 3000,
   fetch: app.fetch,

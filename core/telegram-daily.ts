@@ -1,7 +1,8 @@
 import { buildPortfolio } from './index.ts'
 
 // Envia a carteira diaria do Dinheirama para o Telegram, reusando o motor de /api/portfolio.
-// Rodar uma vez: bun run telegram-daily.ts  (agende via cron/k8s CronJob)
+// Rodar uma vez: bun run telegram-daily.ts (ou bun run notify).
+// O agendamento diario roda in-process no index.ts (servidor 24/7).
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID
@@ -47,6 +48,13 @@ async function sendTelegram(text: string): Promise<void> {
   if (!res.ok) throw new Error(`Telegram status ${res.status}: ${await res.text()}`)
 }
 
-const result = await buildPortfolio()
-await sendTelegram(formatMessage(result))
-console.log('[telegram-daily] carteira enviada')
+export async function sendDailyPortfolio(): Promise<void> {
+  const result = await buildPortfolio()
+  await sendTelegram(formatMessage(result))
+}
+
+// Execucao manual direta: bun run telegram-daily.ts
+if (import.meta.main) {
+  await sendDailyPortfolio()
+  console.log('[telegram-daily] carteira enviada')
+}
