@@ -329,10 +329,10 @@ async function chunkedPromiseAll<T, R>(
   return results
 }
 
-app.get('/api/portfolio', async (c) => {
-  try {
-    log('info', 'Portfolio generation started')
+export async function buildPortfolio() {
+  log('info', 'Portfolio generation started')
 
+  {
     const date = new Date()
     date.setDate(date.getDate() - 30)
     const period1Str = date.toISOString().split('T')[0]
@@ -391,7 +391,7 @@ app.get('/api/portfolio', async (c) => {
     log('info', `Portfolio: ${quotes.length}/${B3_TICKERS.length} tickers loaded`)
 
     if (quotes.length === 0) {
-      return c.json({ error: 'No data available', code: 'NO_DATA' }, 500)
+      throw new Error('No data available')
     }
 
     const quotesSummary = quotes.map(q =>
@@ -456,19 +456,57 @@ Responda em português, formato Markdown.
 
     log('info', 'Portfolio generation complete', { quotesCount: quotes.length, aiSource })
 
-    return c.json({
+    return {
       portfolio: quotes,
       recommendation: aiResponse,
       aiSource,
       tickersAnalyzed: quotes.length,
       timestamp: new Date().toISOString()
-    })
+    }
+  }
+}
 
+app.get('/api/portfolio', async (c) => {
+  try {
+    return c.json(await buildPortfolio())
   } catch (error: any) {
     log('error', 'Portfolio generation failed', { error: error.message })
     return c.json({ error: error.message, code: 'PORTFOLIO_ERROR' }, 500)
   }
 })
+
+// Agendador diario do envio da carteira ao Telegram (roda no servidor 24/7).
+// NOTIFY_UTC_HOUR define a hora UTC (default 11 = 08h BRT). Desativa sem TELEGRAM_*.
+function msUntilNextRun(utcHour: number): number {
+  const now = new Date()
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), utcHour, 0, 0, 0))
+  if (next.getTime() <= now.getTime()) next.setUTCDate(next.getUTCDate() + 1)
+  return next.getTime() - now.getTime()
+}
+
+async function scheduleDailyNotify(): Promise<void> {
+  if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_CHAT_ID) {
+    log('info', 'Daily Telegram notify disabled (no TELEGRAM_* env)')
+    return
+  }
+  const utcHour = Number(process.env.NOTIFY_UTC_HOUR ?? 11)
+  const { sendDailyPortfolio } = await import('./telegram-daily.ts')
+  const run = async () => {
+    try {
+      await sendDailyPortfolio()
+      log('info', 'Daily Telegram notify sent')
+    } catch (error: any) {
+      log('error', 'Daily Telegram notify failed', { error: error.message })
+    }
+    setTimeout(run, msUntilNextRun(utcHour))
+  }
+  setTimeout(run, msUntilNextRun(utcHour))
+  log('info', 'Daily Telegram notify scheduled', { utcHour })
+}
+
+if (import.meta.main) {
+  void scheduleDailyNotify()
+}
 
 export default {
   port: 3000,
