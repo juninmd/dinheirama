@@ -8,11 +8,89 @@ import { Ollama } from 'ollama'
 
 const app = new Hono()
 
-const tickerSchema = z.string().regex(/^[A-Z]{2,4}\.[A-Z]{2}$/, 'Invalid B3 ticker format (ex: PETR4.SA)')
+const tickerSchema = z.string().regex(/^(BTC|BTC-USD|[A-Z]{4}\d{1,2}(\.SA)?)$/, 'Invalid ticker format (ex: PETR4, PETR4.SA, BTC)')
 
 interface CacheEntry<T> {
   data: T
   timestamp: number
+}
+
+interface AssetProfile {
+  input: string
+  symbol: string
+  kind: 'b3' | 'crypto'
+  displayName: string
+  irUrl?: string
+  researchQueries: string[]
+}
+
+interface DecisionModel {
+  action: 'comprar' | 'acompanhar' | 'reduzir'
+  score: number
+  confidence: 'baixa' | 'media' | 'alta'
+  fairZone: {
+    entry: number
+    stop: number
+    target: number
+  }
+  reasons: string[]
+  risks: string[]
+}
+
+const IR_URLS: Record<string, string> = {
+  PETR4: 'https://www.investidorpetrobras.com.br/',
+  VALE3: 'https://vale.com/pt/investidores',
+  ITUB4: 'https://www.itau.com.br/relacoes-com-investidores',
+  BBDC4: 'https://www.bradescori.com.br/',
+  BBAS3: 'https://ri.bb.com.br/',
+  WEGE3: 'https://ri.weg.net/',
+  MGLU3: 'https://ri.magazineluiza.com.br/',
+  B3SA3: 'https://ri.b3.com.br/',
+  PRIO3: 'https://ri.prio3.com.br/',
+  RENT3: 'https://ri.localiza.com/',
+}
+
+function normalizeTicker(rawTicker: string): AssetProfile | null {
+  const input = rawTicker.trim().toUpperCase()
+  const parsed = tickerSchema.safeParse(input)
+  if (!parsed.success) return null
+
+  if (input === 'BTC' || input === 'BTC-USD') {
+    return {
+      input,
+      symbol: 'BTC-USD',
+      kind: 'crypto',
+      displayName: 'Bitcoin',
+      researchQueries: [
+        'bitcoin market efficiency institutional adoption paper',
+        'bitcoin portfolio diversification academic paper',
+      ],
+    }
+  }
+
+  const baseTicker = input.replace('.SA', '')
+  return {
+    input,
+    symbol: `${baseTicker}.SA`,
+    kind: 'b3',
+    displayName: baseTicker,
+    irUrl: IR_URLS[baseTicker] ?? `https://www.google.com/search?q=${encodeURIComponent(`${baseTicker} relações com investidores resultados trimestrais`)}`,
+    researchQueries: [
+      `${baseTicker} B3 valuation paper`,
+      `${baseTicker} equity research Brazil paper`,
+      `${baseTicker} resultados trimestrais RI`,
+    ],
+  }
+}
+
+function sourceLinks(profile: AssetProfile) {
+  return {
+    investorRelations: profile.irUrl ?? null,
+    papers: profile.researchQueries.map((query) => ({
+      title: query,
+      url: `https://scholar.google.com/scholar?q=${encodeURIComponent(query)}`,
+    })),
+  }
 }
 
 class CacheManager {
@@ -88,6 +166,113 @@ function calculateRSI(quotes: any[], periods: number = 14): number | null {
   return 100 - (100 / (1 + rs))
 }
 
+function calculateDecisionModel(
+  profile: AssetProfile,
+  quote: any,
+  history: any[],
+  rsi: number | null
+): DecisionModel {
+  const price = Number(quote.regularMarketPrice)
+  const dayChange = Number(quote.regularMarketChangePercent ?? 0)
+  const firstClose = Number(history[0]?.close ?? price)
+  const lastClose = Number(history.at(-1)?.close ?? price)
+  const change30d = firstClose > 0 ? ((lastClose - firstClose) / firstClose) * 100 : 0
+  const volatility = calculateVolatility(history)
+
+  let score = 50
+  const reasons: string[] = []
+  const risks: string[] = []
+
+  if (rsi !== null && rsi < 35) {
+    score += 18
+    reasons.push(`RSI ${rsi.toFixed(1)} indica sobrevenda e possível assimetria de entrada.`)
+  } else if (rsi !== null && rsi > 70) {
+    score -= 12
+    risks.push(`RSI ${rsi.toFixed(1)} indica sobrecompra; risco de correção aumenta.`)
+  } else if (rsi !== null) {
+    score += 4
+    reasons.push(`RSI ${rsi.toFixed(1)} está em zona neutra, sem estresse técnico extremo.`)
+  }
+
+  if (change30d > 8) {
+    score += 10
+    reasons.push(`Momentum de 30 dias positivo (${change30d.toFixed(1)}%).`)
+  } else if (change30d < -12) {
+    score -= 8
+    risks.push(`Queda de 30 dias relevante (${change30d.toFixed(1)}%); pode haver deterioração fundamental.`)
+  }
+
+  if (dayChange > 2) reasons.push(`Fluxo diário comprador (${dayChange.toFixed(1)}%).`)
+  if (dayChange < -2) risks.push(`Pressão vendedora no dia (${dayChange.toFixed(1)}%).`)
+
+  if (volatility > 5) {
+    score -= profile.kind === 'crypto' ? 4 : 8
+    risks.push(`Volatilidade recente alta (${volatility.toFixed(1)}% ao dia).`)
+  }
+
+  score = Math.max(0, Math.min(100, Math.round(score)))
+  const action = score >= 68 ? 'comprar' : score <= 38 ? 'reduzir' : 'acompanhar'
+  const confidence = history.length >= 20 && rsi !== null ? 'media' : 'baixa'
+
+  return {
+    action,
+    score,
+    confidence,
+    fairZone: {
+      entry: roundMoney(price * (action === 'comprar' ? 0.98 : 0.94)),
+      stop: roundMoney(price * (profile.kind === 'crypto' ? 0.9 : 0.92)),
+      target: roundMoney(price * (action === 'reduzir' ? 1.03 : 1.12)),
+    },
+    reasons: reasons.length ? reasons : ['Dados atuais não mostram vantagem clara; aguarde melhor assimetria.'],
+    risks: risks.length ? risks : ['Risco principal: tese depende de preço, liquidez e próximos eventos corporativos.'],
+  }
+}
+
+function calculateVolatility(history: any[]): number {
+  if (history.length < 3) return 0
+  const returns = history
+    .slice(1)
+    .map((quote, index) => {
+      const previousClose = Number(history[index]?.close)
+      const close = Number(quote.close)
+      return previousClose > 0 ? ((close - previousClose) / previousClose) * 100 : 0
+    })
+    .filter(Number.isFinite)
+
+  if (!returns.length) return 0
+  const average = returns.reduce((sum, item) => sum + item, 0) / returns.length
+  const variance = returns.reduce((sum, item) => sum + Math.pow(item - average, 2), 0) / returns.length
+  return Math.sqrt(variance)
+}
+
+function roundMoney(value: number): number {
+  return Number(value.toFixed(2))
+}
+
+function fallbackAnalysis(profile: AssetProfile, model: DecisionModel, currency: string): string {
+  return [
+    `**Decisão:** ${model.action.toUpperCase()} | Score ${model.score}/100 | Confiança ${model.confidence}.`,
+    '',
+    `**Zona operacional:** entrada até ${formatCurrency(model.fairZone.entry, currency)}, stop em ${formatCurrency(model.fairZone.stop, currency)}, alvo inicial em ${formatCurrency(model.fairZone.target, currency)}.`,
+    '',
+    `**Tese:** ${model.reasons.join(' ')}`,
+    '',
+    `**Riscos:** ${model.risks.join(' ')}`,
+    '',
+    profile.kind === 'b3'
+      ? `**Próximo passo:** ler o RI (${profile.irUrl}) e checar resultado trimestral antes de executar.`
+      : '**Próximo passo:** acompanhar fluxo macro, liquidez global e dominância BTC antes de executar.',
+    '',
+    '*Uso educacional. Não considera seu patrimônio, prazo, imposto ou tolerância a risco.*',
+  ].join('\n')
+}
+
+function formatCurrency(value: number | null | undefined, currency = 'BRL'): string {
+  if (value == null || !Number.isFinite(value)) return 'N/A'
+  const prefix = currency === 'USD' ? 'US$' : 'R$'
+  return `${prefix} ${value.toFixed(2)}`
+}
+
 function log(level: 'info' | 'warn' | 'error', message: string, data?: Record<string, unknown>): void {
   const timestamp = new Date().toISOString()
   const logEntry = { timestamp, level, message, ...data }
@@ -105,6 +290,53 @@ async function fetchWithTimeout<T>(promise: Promise<T>, timeoutMs = 8000): Promi
     return await Promise.race([promise, timeoutPromise])
   } finally {
     if (timeout) clearTimeout(timeout)
+  }
+}
+
+async function generateAnalysis(prompt: string): Promise<{ text: string; source: string }> {
+  const liteLlmBaseUrl = process.env.LITELLM_API_BASE
+  const liteLlmApiKey = process.env.LITELLM_API_KEY
+  const liteLlmModel = process.env.LITELLM_MODEL || 'gpt-4o-mini'
+
+  if (liteLlmBaseUrl && liteLlmApiKey) {
+    try {
+      const response = await fetchWithTimeout(fetch(`${liteLlmBaseUrl.replace(/\/$/, '')}/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${liteLlmApiKey}`,
+        },
+        body: JSON.stringify({
+          model: liteLlmModel,
+          temperature: 0.2,
+          messages: [
+            {
+              role: 'system',
+              content: 'Você é um analista financeiro prudente. Não promete retorno. Distingue dado, inferência e risco.',
+            },
+            { role: 'user', content: prompt },
+          ],
+        }),
+      }), 25000)
+
+      if (!response.ok) throw new Error(`LiteLLM status ${response.status}`)
+      const data = await response.json() as any
+      const content = data.choices?.[0]?.message?.content
+      if (content) return { text: content, source: 'litellm' }
+    } catch (error: any) {
+      log('warn', 'LiteLLM unavailable, trying Ollama', { error: error.message })
+    }
+  }
+
+  try {
+    const ollamaResponse = await fetchWithTimeout(
+      ollama.generate({ model: process.env.OLLAMA_MODEL || 'llama3', prompt, stream: false }),
+      20000
+    )
+    return { text: ollamaResponse.response, source: 'ollama' }
+  } catch (error: any) {
+    log('warn', 'Ollama unavailable, using local model', { error: error.message })
+    return { text: '', source: 'local-model-v0' }
   }
 }
 
@@ -148,22 +380,21 @@ app.get('/health', (c) => {
 })
 
 app.get('/api/quote/:ticker', async (c) => {
-  const ticker = c.req.param('ticker')
+  const profile = normalizeTicker(c.req.param('ticker'))
 
-  const validation = tickerSchema.safeParse(ticker)
-  if (!validation.success) {
+  if (!profile) {
     return c.json({ error: 'Invalid ticker format', code: 'INVALID_TICKER' }, 400)
   }
 
-  const cacheKey = `quote:${ticker}`
+  const cacheKey = `quote:${profile.symbol}`
   const cached = quoteCache.get<unknown>(cacheKey)
   if (cached) {
-    log('info', `Cache hit for ${ticker}`)
+    log('info', `Cache hit for ${profile.symbol}`)
     return c.json({ ...cached as object, cached: true })
   }
 
   try {
-    const quote = await fetchWithRetry(() => yahooFinance.quote(ticker), 2, 500) as {
+    const quote = await fetchWithRetry(() => yahooFinance.quote(profile.symbol), 2, 500) as {
       regularMarketPrice?: number
       regularMarketChangePercent?: number
       regularMarketVolume?: number
@@ -178,20 +409,19 @@ app.get('/api/quote/:ticker', async (c) => {
     quoteCache.set(cacheKey, quote)
     return c.json(quote)
   } catch (error: any) {
-    log('error', `Failed to fetch quote for ${ticker}`, { error: error.message })
+    log('error', `Failed to fetch quote for ${profile.symbol}`, { error: error.message })
     return c.json({ error: 'Failed to fetch quote', code: 'QUOTE_ERROR' }, 500)
   }
 })
 
 app.get('/api/history/:ticker', async (c) => {
-  const ticker = c.req.param('ticker')
+  const profile = normalizeTicker(c.req.param('ticker'))
 
-  const validation = tickerSchema.safeParse(ticker)
-  if (!validation.success) {
+  if (!profile) {
     return c.json({ error: 'Invalid ticker format', code: 'INVALID_TICKER' }, 400)
   }
 
-  const cacheKey = `history:${ticker}`
+  const cacheKey = `history:${profile.symbol}`
   const cached = chartCache.get<unknown>(cacheKey)
   if (cached) {
     return c.json({ ...cached as object, cached: true })
@@ -199,14 +429,14 @@ app.get('/api/history/:ticker', async (c) => {
 
   try {
     const result = await fetchWithRetry(
-      () => yahooFinance.historical(ticker, { period1: '2023-01-01' }),
+      () => yahooFinance.historical(profile.symbol, { period1: '2023-01-01' }),
       2,
       500
     )
     chartCache.set(cacheKey, result)
     return c.json(result)
   } catch (error: any) {
-    log('error', `Failed to fetch history for ${ticker}`, { error: error.message })
+    log('error', `Failed to fetch history for ${profile.symbol}`, { error: error.message })
     return c.json({ error: 'Failed to fetch history', code: 'HISTORY_ERROR' }, 500)
   }
 })
@@ -214,85 +444,71 @@ app.get('/api/history/:ticker', async (c) => {
 app.post('/api/analyze', async (c) => {
   try {
     const body = await c.req.json()
-    const ticker = body.ticker?.trim()?.toUpperCase()
+    const profile = normalizeTicker(body.ticker ?? '')
 
-    if (!ticker) {
+    if (!body.ticker) {
       return c.json({ error: 'Ticker is required', code: 'MISSING_TICKER' }, 400)
     }
 
-    const validation = tickerSchema.safeParse(ticker)
-    if (!validation.success) {
+    if (!profile) {
       return c.json({
-        error: 'Invalid ticker format. Use format: PETR4.SA, VALE3.SA, etc.',
+        error: 'Invalid ticker format. Use: PETR4, PETR4.SA, VALE3.SA, BTC.',
         code: 'INVALID_TICKER'
       }, 400)
     }
 
-    log('info', `Analyzing ticker: ${ticker}`)
+    log('info', `Analyzing ticker: ${profile.symbol}`)
 
-    const quotePromise = fetchWithRetry(() => yahooFinance.quote(ticker), 2, 500)
+    const quotePromise = fetchWithRetry(() => yahooFinance.quote(profile.symbol), 2, 500)
     const quote = await fetchWithTimeout(quotePromise, 10000) as any
 
     if (!quote || quote.regularMarketPrice === undefined) {
-      return c.json({ error: 'Ticker not found on B3', code: 'NOT_FOUND' }, 404)
+      return c.json({ error: 'Ticker not found', code: 'NOT_FOUND' }, 404)
     }
 
     const date = new Date()
     date.setDate(date.getDate() - 30)
     const period1Str = date.toISOString().split('T')[0]!
 
-    const chartPromise = yahooFinance.chart(ticker, { period1: period1Str })
+    const chartPromise = yahooFinance.chart(profile.symbol, { period1: period1Str })
     const chart = await fetchWithTimeout(chartPromise, 15000)
     const history = chart.quotes as any[]
     const rsi = calculateRSI(history)
+    const model = calculateDecisionModel(profile, quote, history, rsi)
+    const sources = sourceLinks(profile)
 
     const prompt = `
-Você é um analista financeiro especialista no mercado brasileiro (B3) e focado EXCLUSIVAMENTE em MAXIMIZAR LUCROS ABSURDOS.
-Ação: ${ticker}
-Preço Atual: R$ ${quote.regularMarketPrice} ${quote.currency}
+Ativo: ${profile.symbol} (${profile.kind})
+Preço Atual: ${formatCurrency(quote.regularMarketPrice, quote.currency)} ${quote.currency}
 Variação: ${quote.regularMarketChangePercent?.toFixed(2) || 'N/A'}%
 RSI (14 dias): ${rsi !== null ? rsi.toFixed(2) : 'N/A'}
 Volume: ${quote.regularMarketVolume?.toLocaleString() || 'N/A'}
+Modelo local: ação=${model.action}, score=${model.score}, confiança=${model.confidence}, entrada=${model.fairZone.entry}, stop=${model.fairZone.stop}, alvo=${model.fairZone.target}
+Fontes para checar:
+- RI: ${sources.investorRelations ?? 'N/A'}
+- Pesquisa: ${sources.papers.map((paper) => paper.url).join(' | ')}
 
 Resumo do histórico de 30 dias:
-${history.length > 0 ? history.slice(-14).map((h: any) => `Data: ${h.date.toISOString().split('T')[0]}, Fechamento: R$ ${h.close?.toFixed(2)}`).join('\n') : 'Dados insuficientes'}
+${history.length > 0 ? history.slice(-14).map((h: any) => `Data: ${h.date.toISOString().split('T')[0]}, Fechamento: ${formatCurrency(h.close, quote.currency)}`).join('\n') : 'Dados insuficientes'}
 
-Forneça uma análise BRUTAL E AGRESSIVA focada em rentabilidade extrema.
-- Se RSI < 30: exalte a oportunidade de repique violento (sobrevenda extrema)
-- Se RSI > 70: recomende surfar a euforia (sobrecompra, momentum)
-- Se 30 <= RSI <= 70: destaque consolidação e próximos catalisadores
-
-Responda em português, em formato Markdown limpo.
+Responda em português, Markdown curto, com:
+1. decisão operacional: comprar, acompanhar ou reduzir;
+2. preço bom: entrada, stop e alvo inicial;
+3. tese de investimento;
+4. riscos que invalidam a tese;
+5. próximos documentos a ler.
+Não prometa retorno. Não personalize por patrimônio. Se os dados forem fracos, diga que a confiança é baixa.
 `.trim()
 
-    let aiResponse = ''
-    let aiSource = 'ollama'
+    const llm = await generateAnalysis(prompt)
+    const aiResponse = llm.text || fallbackAnalysis(profile, model, quote.currency)
+    const aiSource = llm.text ? llm.source : 'local-model-v0'
 
-    try {
-      const ollamaResponse = await fetchWithTimeout(
-        ollama.generate({ model: 'llama3', prompt, stream: false }),
-        20000
-      )
-      aiResponse = ollamaResponse.response
-    } catch (ollamaError: any) {
-      log('warn', 'Ollama unavailable, using fallback', { error: ollamaError.message })
-      aiSource = 'fallback'
-
-      if (rsi !== null && rsi < 30) {
-        aiResponse = `**ANÁLISE EXTREMA (Oportunidade de Alto Ganho)**\n\nA ação **${ticker}** está em **SOBREVENDA EXTREMA** (RSI ${rsi.toFixed(2)}).\n\n**COMPRE AGORA!** A reprecificação será violenta. Sangue nas ruas é o momento de ficar rico. Alavanque na recuperação rápida.\n\n*⚠️ Análise automática baseada em RSI (sem IA]*`
-      } else if (rsi !== null && rsi > 70) {
-        aiResponse = `**ANÁLISE DE MOMENTUM (Força Irresistível)**\n\nA ação **${ticker}** mostra RSI de ${rsi.toFixed(2)} - sobrecompra extrema mas **o foguete ainda tem combustível!**\n\n**FOGUETE NÃO TEM RÉ!** Momentum absurdo. Entre rasgando para surfar a alta dos grandes players.\n\n*⚠️ Análise automática baseada em RSI (sem IA]*`
-      } else if (quote.regularMarketChangePercent > 0) {
-        aiResponse = `**ANÁLISE BULL (Viés Positivo)**\n\n**${ticker}** em alta de +${quote.regularMarketChangePercent.toFixed(2)}% hoje. RSI em ${rsi?.toFixed(2) || 'N/A'} indica espaço para continuidade.\n\n**COMPRE O MOMENTUM!** O mercado recompensa os corajosos.\n\n*⚠️ Análise automática baseada em RSI (sem IA]*`
-      } else {
-        aiResponse = `**ANÁLISE CONSOLIDAÇÃO (Aguarde Oportunidade)**\n\n**${ticker}** em leve retração de ${quote.regularMarketChangePercent?.toFixed(2) || 0}% (RSI ${rsi?.toFixed(2) || 'N/A'}).\n\nAguarde confirmação de entrada. O mercado é um mercado de probabilidades.\n\n*⚠️ Análise automática baseada em RSI (sem IA]*`
-      }
-    }
-
-    log('info', `Analysis complete for ${ticker}`, { rsi, aiSource })
+    log('info', `Analysis complete for ${profile.symbol}`, { rsi, aiSource, score: model.score })
 
     return c.json({
-      ticker,
+      ticker: profile.symbol,
+      profile,
       quote: {
         price: quote.regularMarketPrice,
         change: quote.regularMarketChangePercent,
@@ -300,6 +516,8 @@ Responda em português, em formato Markdown limpo.
         currency: quote.currency
       },
       rsi,
+      decision: model,
+      sources,
       analysis: aiResponse,
       aiSource,
       timestamp: new Date().toISOString()
@@ -319,6 +537,8 @@ const B3_TICKERS = [
   'VIVT3.SA', 'TIMS3.SA', 'EQTL3.SA', 'TAEE11.SA', 'TRPL4.SA'
 ]
 
+const DEFAULT_ASSETS = [...B3_TICKERS, 'BTC-USD']
+
 const CONCURRENCY_LIMIT = 5
 
 async function chunkedPromiseAll<T, R>(
@@ -335,18 +555,21 @@ async function chunkedPromiseAll<T, R>(
   return results
 }
 
-app.get('/api/portfolio', async (c) => {
-  try {
-    log('info', 'Portfolio generation started')
+export async function buildPortfolio() {
+  log('info', 'Portfolio generation started')
 
+  {
     const date = new Date()
     date.setDate(date.getDate() - 30)
     const period1Str = date.toISOString().split('T')[0]
 
-    const quoteResults = await chunkedPromiseAll(B3_TICKERS, async (ticker) => {
+    const quoteResults = await chunkedPromiseAll(DEFAULT_ASSETS, async (ticker) => {
       try {
+        const profile = normalizeTicker(ticker)
+        if (!profile) return null
+
         const quote = await fetchWithTimeout(
-          fetchWithRetry(() => yahooFinance.quote(ticker), 1, 500),
+          fetchWithRetry(() => yahooFinance.quote(profile.symbol), 1, 500),
           8000
         ) as any
 
@@ -356,13 +579,14 @@ app.get('/api/portfolio', async (c) => {
 
         let historyChange = 0
         let rsi = null
+        let history: any[] = []
 
         try {
           const chart = await fetchWithTimeout(
-            fetchWithRetry(() => yahooFinance.chart(ticker, { period1: period1Str! }), 1, 500),
+            fetchWithRetry(() => yahooFinance.chart(profile.symbol, { period1: period1Str! }), 1, 500),
             10000
           )
-          const history = chart.quotes as any[]
+          history = chart.quotes as any[]
 
           if (history && history.length > 0) {
             const pastPrice = history[0]?.close
@@ -374,16 +598,22 @@ app.get('/api/portfolio', async (c) => {
             rsi = calculateRSI(history)
           }
         } catch (e) {
-          log('warn', `History fetch failed for ${ticker}`)
+          log('warn', `History fetch failed for ${profile.symbol}`)
         }
 
+        const decision = calculateDecisionModel(profile, quote, history, rsi)
+
         return {
-          ticker,
+          ticker: profile.symbol,
+          profile,
           price: quote.regularMarketPrice,
           change: quote.regularMarketChangePercent,
           volume: quote.regularMarketVolume,
+          currency: quote.currency,
           historyChange,
           rsi,
+          decision,
+          sources: sourceLinks(profile),
           valid: true
         }
       } catch (e) {
@@ -394,82 +624,57 @@ app.get('/api/portfolio', async (c) => {
 
     const quotes = quoteResults.filter((q): q is NonNullable<typeof q> => q !== null && q.valid)
 
-    log('info', `Portfolio: ${quotes.length}/${B3_TICKERS.length} tickers loaded`)
+    log('info', `Portfolio: ${quotes.length}/${DEFAULT_ASSETS.length} tickers loaded`)
 
     if (quotes.length === 0) {
-      return c.json({ error: 'No data available', code: 'NO_DATA' }, 500)
+      throw new Error('No data available')
     }
 
     const quotesSummary = quotes.map(q =>
-      `- ${q.ticker}: R$ ${q.price?.toFixed(2) || 'N/A'} | Diário ${q.change?.toFixed(2) || 'N/A'}% | 30D ${q.historyChange?.toFixed(2) || 'N/A'}% | RSI ${q.rsi?.toFixed(2) || 'N/A'}`
+      `- ${q.ticker}: ${formatCurrency(q.price, q.currency)} | Diário ${q.change?.toFixed(2) || 'N/A'}% | 30D ${q.historyChange?.toFixed(2) || 'N/A'}% | RSI ${q.rsi?.toFixed(2) || 'N/A'} | decisão ${q.decision.action} | score ${q.decision.score}`
     ).join('\n')
 
     const prompt = `
-Você é um analista financeiro especialista no mercado brasileiro (B3) e um gestor de carteiras EXTREMAMENTE AGRESSIVO. O objetivo é MAXIMIZAR OS LUCROS.
+Você é um analista financeiro prudente para B3 + Bitcoin.
 
 Dados das ações disponíveis:
 ${quotesSummary}
 
-Selecione as 3 a 5 ações com maior potencial de ganho baseado em:
-- RSI < 30: oportunidade de repique violento (sobrevenda extrema)
-- RSI > 70: momentum explosivo (sobrecompra com força)
-- historyChange: desempenho recente
-
-Monte um portfólio agressivo com pesos que concentrem capital nas melhores oportunidades.
-
-Responda em português, formato Markdown.
+Selecione 3 a 6 ativos por assimetria risco/retorno. Inclua pesos sugeridos, ativos a evitar/reduzir, preço bom e riscos.
+Não prometa retorno. Não personalize por patrimônio. Seja direto.
 `.trim()
 
-    let aiResponse = ''
-    let aiSource = 'ollama'
-
-    try {
-      const ollamaResponse = await fetchWithTimeout(
-        ollama.generate({ model: 'llama3', prompt, stream: false }),
-        30000
-      )
-      aiResponse = ollamaResponse.response
-    } catch (ollamaError: any) {
-      log('warn', 'Ollama unavailable for portfolio', { error: ollamaError.message })
-      aiSource = 'fallback'
-
-      const sortedByRSI = [...quotes].filter(q => q.rsi !== null && q.rsi < 35)
-        .sort((a, b) => (a.rsi ?? 100) - (b.rsi ?? 100))
-
-      const sortedByMomentum = [...quotes].sort((a, b) =>
-        (b.historyChange || 0) - (a.historyChange || 0)
-      )
-
-      aiResponse = `**PORTFÓLIO ULTRA-AGRESSIVO B3 (Análise Automática)**\n\n`
-
-      if (sortedByRSI.length > 0) {
-        aiResponse += `**🎯 OPORTUNIDADES DE REPIQUE:**\n`
-        sortedByRSI.slice(0, 3).forEach((q, i) => {
-          aiResponse += `${i + 1}. **${q.ticker}** - RSI ${q.rsi?.toFixed(2)}, -30D ${q.historyChange?.toFixed(2) || 0}%\n`
-        })
-        aiResponse += `\n`
-      }
-
-      if (sortedByMomentum.length > 0) {
-        aiResponse += `**🚀 MOMENTUM DE ALTA:**\n`
-        sortedByMomentum.slice(0, 3).forEach((q, i) => {
-          aiResponse += `${i + 1}. **${q.ticker}** - +${q.historyChange?.toFixed(2) || 0}% (30D)\n`
-        })
-      }
-
-      aiResponse += `\n*⚠️ Análise automática (sem IA)*`
-    }
+    const llm = await generateAnalysis(prompt)
+    const ranked = [...quotes].sort((a, b) => b.decision.score - a.decision.score)
+    const aiResponse = llm.text || [
+      '**Carteira sugerida pelo modelo local v0**',
+      '',
+      ...ranked.slice(0, 5).map((q, index) =>
+        `${index + 1}. **${q.ticker}** - ${q.decision.action}, score ${q.decision.score}/100, entrada até ${formatCurrency(q.decision.fairZone.entry, q.currency)}, stop ${formatCurrency(q.decision.fairZone.stop, q.currency)}.`
+      ),
+      '',
+      '**Reduzir/evitar agora:**',
+      ...ranked.slice(-3).reverse().map((q) => `- **${q.ticker}** - score ${q.decision.score}/100.`),
+      '',
+      '*Uso educacional. Requer leitura de RI/pesquisa antes de executar.*',
+    ].join('\n')
+    const aiSource = llm.text ? llm.source : 'local-model-v0'
 
     log('info', 'Portfolio generation complete', { quotesCount: quotes.length, aiSource })
 
-    return c.json({
+    return {
       portfolio: quotes,
       recommendation: aiResponse,
       aiSource,
       tickersAnalyzed: quotes.length,
       timestamp: new Date().toISOString()
-    })
+    }
+  }
+}
 
+app.get('/api/portfolio', async (c) => {
+  try {
+    return c.json(await buildPortfolio())
   } catch (error: any) {
     log('error', 'Portfolio generation failed', { error: error.message })
     return c.json({ error: error.message, code: 'PORTFOLIO_ERROR' }, 500)
