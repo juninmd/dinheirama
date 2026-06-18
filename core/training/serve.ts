@@ -1,4 +1,3 @@
-import { log } from '../index'
 import * as fs from 'fs'
 import * as path from 'path'
 
@@ -102,10 +101,10 @@ function loadModel(modelDir?: string): ModelData | null {
       version: meta.horizon ? `xgb_horizon_${meta.horizon}d_v1` : 'unknown',
     }
 
-    log('info', `Model loaded from ${tsPath}`, { version: _model.version })
+    console.log(`[serve] Model loaded from ${tsPath} v${_model.version}`)
     return _model
   } catch (error: any) {
-    log('warn', 'Failed to load ML model, using fallback', { error: error.message })
+    console.warn(`[serve] Failed to load ML model: ${error.message}`)
     return null
   }
 }
@@ -211,16 +210,16 @@ export function initModel(modelDir?: string): boolean {
     if (fs.existsSync(dir)) {
       _model = loadModel(dir)
       if (_model) {
-        log('info', 'ML model initialized from ' + dir, { version: _model.version })
+        console.log(`[serve] ML model initialized from ${dir} v${_model.version}`)
         return true
       }
     }
   } catch (error: any) {
-    log('warn', 'Could not initialize ML model', { error: error.message })
+    console.warn(`[serve] Could not initialize ML model: ${error.message}`)
   }
 
   _model = null
-  log('info', 'No ML model found, using fallback predictor')
+  console.log('[serve] No ML model found, using fallback predictor')
   return false
 }
 
