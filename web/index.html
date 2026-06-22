@@ -4,9 +4,9 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Análise de ações da B3 com IA - Ganhe dinheiro identificando oportunidades no mercado brasileiro" />
+    <meta name="description" content="Assistente 24h de ações e cripto com IA, notícias, papers e gestão de risco" />
     <meta name="theme-color" content="#242424" />
-    <title>Dinheirama - Análise de Ações B3 com IA</title>
+    <title>Dinheirama - Assistente 24h de Ações e Cripto</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -21,7 +21,7 @@
         <div class="header-content">
           <div class="header-title">
             <h1>📈 Dinheirama</h1>
-            <p class="subtitle">Análise de Ações da B3 com IA</p>
+            <p class="subtitle">Radar 24h de ações, cripto, notícias e papers</p>
           </div>
           <button id="dark-mode-toggle" class="icon-btn" aria-label="Alternar modo escuro" title="Alternar tema">
             <span class="theme-icon">🌙</span>
@@ -36,7 +36,7 @@
               <input
                 type="text"
                 id="ticker-input"
-                placeholder="Ex: PETR4.SA, VALE3.SA, ITUB4.SA"
+                placeholder="Ex: PETR4.SA, VALE3.SA, BTC-USD"
                 autocomplete="off"
                 autocapitalize="characters"
                 spellcheck="false"
@@ -56,7 +56,19 @@
 
           <button id="generate-portfolio-btn" class="secondary-btn">
             <span class="btn-icon">🚀</span>
-            Gerar Portfólio Agressivo
+            Gerar Radar 24h
+          </button>
+          <button id="training-btn" class="secondary-btn compact-btn">
+            <span class="btn-icon">🎓</span>
+            Treinar Decisão
+          </button>
+          <button id="research-btn" class="secondary-btn compact-btn">
+            <span class="btn-icon">📚</span>
+            Pesquisar Papers
+          </button>
+          <button id="alerts-btn" class="secondary-btn compact-btn">
+            <span class="btn-icon">🔔</span>
+            Alertas & Telegram
           </button>
         </div>
 
@@ -99,24 +111,144 @@
               <span class="stat-label">RSI (14)</span>
               <span id="res-rsi" class="stat-value">-</span>
             </div>
+            <div class="stat-card">
+              <span class="stat-label">Score</span>
+              <span id="res-score" class="stat-value">-</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Ação</span>
+              <span id="res-action" class="stat-value">-</span>
+            </div>
           </div>
 
           <div class="analysis-box">
-            <h3>📊 Recomendação da IA</h3>
+            <h3>📊 Decisão da IA</h3>
             <p id="res-analysis" class="analysis-text"></p>
+          </div>
+          <div class="analysis-box signal-box">
+            <h3>📰 Sinais externos</h3>
+            <ul id="res-signals" class="signal-list"></ul>
           </div>
         </section>
 
         <section id="portfolio-result" class="card portfolio-card hidden">
           <div class="result-header">
-            <h2>🎯 Portfólio Recomendado</h2>
+            <h2>🎯 Radar Recomendado</h2>
           </div>
 
           <div id="portfolio-stats" class="portfolio-grid"></div>
 
           <div class="analysis-box">
-            <h3>📈 Estratégia do Gestor IA</h3>
+            <h3>📈 Estratégia do Assistente</h3>
             <p id="portfolio-analysis" class="analysis-text"></p>
+          </div>
+        </section>
+
+        <section id="training-result" class="card portfolio-card hidden">
+          <div class="result-header">
+            <h2>Treino de Mercado</h2>
+          </div>
+          <div id="training-list" class="training-list"></div>
+        </section>
+
+        <section id="research-result" class="card portfolio-card hidden">
+          <div class="result-header">
+            <h2>Pesquisa de Impacto</h2>
+          </div>
+          <p id="research-summary" class="analysis-text"></p>
+          <div id="research-list" class="research-list"></div>
+        </section>
+
+        <section id="alerts-result" class="card portfolio-card hidden">
+          <div class="result-header">
+            <h2>🔔 Central de Alertas & Telegram</h2>
+          </div>
+
+          <div class="alerts-manager-grid">
+            <div class="alert-form-box">
+              <h3 class="alerts-subtitle">Criar Novo Alerta</h3>
+              <form id="create-alert-form" class="alert-form">
+                <div class="form-row">
+                  <div class="form-group flex-1">
+                    <label for="alert-ticker">Ativo</label>
+                    <input type="text" id="alert-ticker" placeholder="Ex: BTC-USD, PETR4.SA" required />
+                  </div>
+                  <div class="form-group flex-1">
+                    <label for="alert-type">Tipo de Sinal</label>
+                    <select id="alert-type">
+                      <option value="price">Preço</option>
+                      <option value="rsi">RSI (14)</option>
+                      <option value="ml_signal">Sinal de ML (Action)</option>
+                    </select>
+                  </div>
+                </div>
+                
+                <div class="form-row">
+                  <div class="form-group flex-1">
+                    <label for="alert-condition">Condição</label>
+                    <select id="alert-condition">
+                      <option value="above">Acima de (&gt;)</option>
+                      <option value="below">Abaixo de (&lt;)</option>
+                      <option value="action_equals" class="hidden-cond">Igual a (=)</option>
+                    </select>
+                  </div>
+                  <div class="form-group flex-1">
+                    <label for="alert-value">Valor / Ação</label>
+                    <input type="text" id="alert-value" placeholder="Ex: 75000, 30" required />
+                  </div>
+                </div>
+                
+                <button type="submit" class="primary-btn full-width mt-1">
+                  <span>➕</span> Criar Alerta
+                </button>
+              </form>
+            </div>
+
+            <div class="telegram-config-box">
+              <h3 class="alerts-subtitle">Integração Telegram</h3>
+              <p class="config-desc">
+                Os alertas disparados enviam notificações em tempo real para o chat configurado em seu <code>.env</code> (usando <code>TELEGRAM_BOT_TOKEN</code> e <code>TELEGRAM_CHAT_ID</code>).
+              </p>
+              <button id="test-telegram-btn" class="secondary-btn full-width">
+                <span>⚡</span> Testar Conexão do Bot
+              </button>
+            </div>
+          </div>
+
+          <div class="divider mt-2 mb-2"></div>
+
+          <div class="alerts-lists-section">
+            <div class="alerts-list-container">
+              <h3 class="alerts-subtitle">Alertas Ativos</h3>
+              <div class="table-container">
+                <table class="alerts-table">
+                  <thead>
+                    <tr>
+                      <th>Ativo</th>
+                      <th>Tipo</th>
+                      <th>Gatilho</th>
+                      <th>Status</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody id="active-alerts-list">
+                    <tr>
+                      <td colspan="5" class="empty-list-msg text-center">Carregando alertas...</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="alerts-history-container mt-2">
+              <div class="history-header">
+                <h3 class="alerts-subtitle">Histórico de Disparos</h3>
+                <button id="clear-alert-history-btn" class="danger-btn compact-btn hidden">Limpar</button>
+              </div>
+              <ul id="alerts-history-list" class="history-list">
+                <li class="empty-list-msg">Carregando histórico...</li>
+              </ul>
+            </div>
           </div>
         </section>
 
@@ -127,7 +259,7 @@
       </main>
 
       <footer class="app-footer">
-        <p>Dados: Yahoo Finance • IA: Ollama • Para fins educacionais</p>
+        <p>Dados: Yahoo Finance • IA: Ollama • fast-news/papers via env • Uso educacional</p>
       </footer>
     </div>
 

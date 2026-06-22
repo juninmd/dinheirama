@@ -7,6 +7,15 @@ const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] })
 import { Ollama } from 'ollama'
 import { initModel, predict, reloadModel, isModelLoaded } from './training/serve'
 import type { FeatureVector, ModelPrediction } from './training/serve'
+import {
+  getAlerts,
+  addAlert,
+  deleteAlert,
+  toggleAlert,
+  getHistory,
+  clearHistory,
+  startAlertsCheckLoop
+} from './alerts-manager.ts'
 
 const app = new Hono()
 
@@ -425,7 +434,7 @@ const MARKET_UNIVERSE: MarketAsset[] = [
 
 const CONCURRENCY_LIMIT = 5
 
-async function buildAssetSnapshot(asset: MarketAsset): Promise<AssetSnapshot | null> {
+export async function buildAssetSnapshot(asset: MarketAsset): Promise<AssetSnapshot | null> {
   try {
     const quote = await fetchWithTimeout(
       fetchWithRetry(() => yahooFinance.quote(asset.ticker), 2, 500),
@@ -733,6 +742,66 @@ app.get('/api/model/status', (c) => {
   })
 })
 
+app.get('/api/alerts', (c) => {
+  return c.json(getAlerts())
+})
+
+app.post('/api/alerts', async (c) => {
+  try {
+    const body = await c.req.json()
+    const { ticker, type, condition, value } = body
+    if (!ticker || !type || !condition || value === undefined) {
+      return c.json({ error: 'Missing required alert fields' }, 400)
+    }
+    const newAlert = addAlert({
+      ticker: String(ticker).toUpperCase().trim(),
+      type,
+      condition,
+      value
+    })
+    return c.json(newAlert)
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500)
+  }
+})
+
+app.put('/api/alerts/:id/toggle', async (c) => {
+  try {
+    const id = c.req.param('id')
+    const body = await c.req.json()
+    const { enable } = body
+    const success = toggleAlert(id, enable !== false)
+    return c.json({ success })
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500)
+  }
+})
+
+app.delete('/api/alerts/:id', (c) => {
+  const id = c.req.param('id')
+  const success = deleteAlert(id)
+  return c.json({ success })
+})
+
+app.get('/api/alerts/history', (c) => {
+  return c.json(getHistory())
+})
+
+app.post('/api/alerts/clear-history', (c) => {
+  clearHistory()
+  return c.json({ success: true })
+})
+
+app.post('/api/alerts/test-telegram', async (c) => {
+  try {
+    const { sendTelegram } = await import('./telegram-daily.ts')
+    await sendTelegram('⚡ <b>Dinheirama Alertas</b>\nConexão de teste bem-sucedida! O canal de alertas está funcionando.')
+    return c.json({ success: true })
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500)
+  }
+})
+
 // Agendador diario do envio da carteira ao Telegram (roda no servidor 24/7).
 // NOTIFY_UTC_HOUR define a hora UTC (default 11 = 08h BRT). Desativa sem TELEGRAM_*.
 function msUntilNextRun(utcHour: number): number {
@@ -766,6 +835,8 @@ if (import.meta.main) {
   void scheduleDailyNotify()
   initModel()
   log('info', 'ML model init: ' + (isModelLoaded() ? 'loaded' : 'fallback'))
+  // Start background alert checker (runs every 60s by default)
+  startAlertsCheckLoop(buildAssetSnapshot, Number(process.env.ALERT_CHECK_INTERVAL_MS ?? 60000))
 }
 
 export default {

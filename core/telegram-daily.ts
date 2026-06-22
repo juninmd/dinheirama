@@ -1,6 +1,6 @@
 import { buildPortfolio } from './index.ts'
 
-// Envia a carteira diaria do Dinheirama para o Telegram, reusando o motor de /api/portfolio.
+// Envia o radar diario do Dinheirama para o Telegram, reusando o motor de /api/portfolio.
 // Rodar uma vez: bun run telegram-daily.ts (ou bun run notify).
 // O agendamento diario roda in-process no index.ts (servidor 24/7).
 
@@ -11,39 +11,39 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-function formatMessage(result: Awaited<ReturnType<typeof buildPortfolio>>): string {
+export function formatMessage(result: Awaited<ReturnType<typeof buildPortfolio>>): string {
   const date = new Date().toLocaleDateString('pt-BR')
-  const ranked = [...result.portfolio].sort((a, b) => (b.historyChange ?? 0) - (a.historyChange ?? 0))
+  const ranked = [...result.portfolio].sort((a, b) => b.score - a.score)
   const top = ranked.slice(0, 5)
 
   const lines = top.map((q) => {
-    const price = q.price != null ? `R$ ${q.price.toFixed(2)}` : 'N/A'
+    const price = q.price != null ? q.price.toFixed(2) : 'N/A'
     const chg30 = q.historyChange != null ? `${q.historyChange >= 0 ? '+' : ''}${q.historyChange.toFixed(1)}% 30D` : ''
     const rsi = q.rsi != null ? ` | RSI ${q.rsi.toFixed(0)}` : ''
-    return `• <b>${q.ticker}</b> — ${price} (${chg30})${rsi}`
+    return `• <b>${q.ticker}</b> — ${q.action.toUpperCase()} ${q.score}/100 | ${price} (${chg30})${rsi} | risco ${q.risk} | impacto ${q.newsImpact.label}/${q.newsImpact.score}`
   })
 
   return [
-    `<b>📊 Dinheirama — Carteira do Dia (${date})</b>`,
+    `<b>📊 Dinheirama — Radar 24h (${date})</b>`,
     '',
-    `<b>Top assimetrias (${result.tickersAnalyzed} ativos analisados):</b>`,
+    `<b>Top assimetrias ações + cripto (${result.tickersAnalyzed} ativos analisados):</b>`,
     ...lines,
     '',
     escapeHtml(result.recommendation).slice(0, 2500),
     '',
-    `<i>Fonte IA: ${result.aiSource}. Uso educacional — não é recomendação formal.</i>`,
+    `<i>Fonte IA: ${result.aiSource}. Uso educacional; valide notícias, papers e risco antes de operar.</i>`,
   ].join('\n')
 }
 
-async function sendTelegram(text: string): Promise<void> {
-  if (!BOT_TOKEN || !CHAT_ID) throw new Error('Faltam TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID')
+export async function sendTelegram(text: string, chatId: string | number = CHAT_ID!, parseMode: 'HTML' | null = 'HTML'): Promise<void> {
+  if (!BOT_TOKEN || !chatId) throw new Error('Faltam TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID')
   const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      chat_id: CHAT_ID,
+      chat_id: chatId,
       text,
-      parse_mode: 'HTML',
+      ...(parseMode ? { parse_mode: parseMode } : {}),
       disable_web_page_preview: true,
     }),
   })
