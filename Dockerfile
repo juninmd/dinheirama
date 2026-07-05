@@ -7,7 +7,7 @@ COPY web/ .
 RUN bun run build
 
 # Python Training Image
-FROM python:3.13-slim AS trainer
+FROM python:3.14-slim AS trainer
 WORKDIR /app
 
 RUN pip install --no-cache-dir \
