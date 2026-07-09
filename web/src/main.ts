@@ -17,7 +17,7 @@ interface WatchlistItem {
 interface AnalyzeResponse {
   ticker: string
   name: string
-  assetClass: 'stock' | 'crypto'
+  assetClass: 'stock'
   quote: { price: number; change: number; volume?: number; currency?: string }
   rsi: number | null
   score: number
@@ -35,7 +35,7 @@ interface PortfolioResponse {
   portfolio: Array<{
     ticker: string
     name: string
-    assetClass: 'stock' | 'crypto'
+    assetClass: 'stock'
     price: number
     change: number
     historyChange: number
@@ -475,7 +475,7 @@ function renderPortfolioResult(data: PortfolioResponse): void {
     div.innerHTML = `
       <div class="portfolio-stock-header">
         <span class="portfolio-stock-ticker">${escapeHtml(stock.ticker)}</span>
-        <span class="portfolio-stock-price">${formatPrice(stock.price, 2, stock.assetClass === 'crypto' ? 'USD' : 'BRL')}</span>
+        <span class="portfolio-stock-price">${formatPrice(stock.price, 2, 'BRL')}</span>
       </div>
       <div class="portfolio-stock-stats">
         <span style="color: ${getChangeColor(stock.change)}">${formatPercent(stock.change)}</span>

@@ -19,7 +19,6 @@ import {
 
 const app = new Hono()
 
-const assetSchema = z.string().regex(/^[A-Z0-9]{2,12}([.-][A-Z0-9]{2,6})?$/, 'Invalid asset format (ex: PETR4.SA or BTC-USD)')
 const tickerSchema = z.string().regex(/^[A-Z0-9]{4,6}\.[A-Z]{2}$/, 'Invalid B3 ticker format (ex: PETR4.SA)')
 
 interface CacheEntry<T> {
@@ -298,10 +297,10 @@ app.post('/api/analyze', async (c) => {
       return c.json({ error: 'Ticker is required', code: 'MISSING_TICKER' }, 400)
     }
 
-    const validation = assetSchema.safeParse(ticker)
+    const validation = tickerSchema.safeParse(ticker)
     if (!validation.success) {
       return c.json({
-        error: 'Invalid asset format. Use PETR4.SA, VALE3.SA, BTC-USD, ETH-USD, etc.',
+        error: 'Invalid B3 ticker format (ex: PETR4.SA)',
         code: 'INVALID_TICKER'
       }, 400)
     }
@@ -320,7 +319,7 @@ app.post('/api/analyze', async (c) => {
     }
 
     const prompt = `
-Você é um assistente 24h de ações e cripto. Objetivo: aumentar patrimônio com disciplina, não prometer lucro.
+Você é um assistente 24h especializado em ações da B3. Objetivo: maximizar lucros com uma estratégia agressiva de alto rendimento.
 Ativo: ${snapshot.ticker} (${snapshot.assetClass})
 Preço: ${snapshot.price} | variação diária: ${snapshot.change?.toFixed(2) || 'N/A'}%
 30D: ${snapshot.historyChange.toFixed(2)}% | RSI: ${snapshot.rsi?.toFixed(2) || 'N/A'}
@@ -426,10 +425,6 @@ const MARKET_UNIVERSE: MarketAsset[] = [
   { ticker: 'RADL3.SA', name: 'Raia Drogasil ON', assetClass: 'stock', thesis: 'saude, varejo defensivo e expansao' },
   { ticker: 'VIVT3.SA', name: 'Telefonica Brasil ON', assetClass: 'stock', thesis: 'telecom, dividendos e defensivo' },
   { ticker: 'TAEE11.SA', name: 'Taesa Unit', assetClass: 'stock', thesis: 'transmissao, dividendos e inflacao' },
-  { ticker: 'BTC-USD', name: 'Bitcoin', assetClass: 'crypto', thesis: 'cripto reserva digital, liquidez global e halving' },
-  { ticker: 'ETH-USD', name: 'Ethereum', assetClass: 'crypto', thesis: 'smart contracts, staking e atividade on-chain' },
-  { ticker: 'SOL-USD', name: 'Solana', assetClass: 'crypto', thesis: 'alta beta cripto, apps e uso de rede' },
-  { ticker: 'BNB-USD', name: 'BNB', assetClass: 'crypto', thesis: 'exchange token, fees e ecossistema' },
 ]
 
 const CONCURRENCY_LIMIT = 5
@@ -534,12 +529,12 @@ export async function buildPortfolio() {
     ).join('\n')
 
     const prompt = `
-Você é um assistente 24h de ações e cripto. Objetivo: crescer patrimônio com assimetria, gestão de risco e disciplina.
+Você é um assistente 24h especializado em ações da B3. Objetivo: maximizar lucros com uma estratégia agressiva de alto rendimento.
 
 Dados dos ativos disponíveis:
 ${quotesSummary}
 
-Selecione 3 a 5 oportunidades entre ações e cripto com:
+Selecione 3 a 5 oportunidades de ações da B3 com:
 - tese clara
 - catalisador monitorável
 - limite de risco
@@ -564,11 +559,11 @@ Responda em português, formato Markdown.
       aiSource = 'fallback'
 
       const ranked = [...quotes].sort((a, b) => b.score - a.score)
-      aiResponse = `**Radar automático ações + cripto**\n\n`
+      aiResponse = `**Radar automático de ações B3**\n\n`
       ranked.slice(0, 5).forEach((q, i) => {
         aiResponse += `${i + 1}. **${q.ticker}** (${q.assetClass}) - ${q.action.toUpperCase()} | score ${q.score}/100 | risco ${q.risk} | impacto ${q.newsImpact.label}/${q.newsImpact.score} | 30D ${q.historyChange.toFixed(1)}% | RSI ${q.rsi?.toFixed(0) || 'N/A'}.\n`
       })
-      aiResponse += `\n**Gestão:** fracionar entrada, limitar exposição em cripto e revisar sinais de fast-news/papers antes de aumentar posição.\n\n*Análise automática. Não é recomendação formal de investimento.*`
+      aiResponse += `\n**Gestão:** fracionar entrada, revisar sinais de fast-news/papers antes de aumentar posição.\n\n*Análise automática. Não é recomendação formal de investimento.*`
     }
 
     log('info', 'Portfolio generation complete', { quotesCount: quotes.length, aiSource })
@@ -638,7 +633,7 @@ app.get('/api/training', async (c) => {
 app.get('/api/research/:ticker', async (c) => {
   try {
     const ticker = normalizeAsset(c.req.param('ticker'))
-    const validation = assetSchema.safeParse(ticker)
+    const validation = tickerSchema.safeParse(ticker)
     if (!validation.success) {
       return c.json({ error: 'Invalid asset format', code: 'INVALID_TICKER' }, 400)
     }
