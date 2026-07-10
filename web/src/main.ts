@@ -17,7 +17,7 @@ interface WatchlistItem {
 interface AnalyzeResponse {
   ticker: string
   name: string
-  assetClass: 'stock' | 'crypto'
+  assetClass: 'stock'
   quote: { price: number; change: number; volume?: number; currency?: string }
   rsi: number | null
   score: number
@@ -35,7 +35,7 @@ interface PortfolioResponse {
   portfolio: Array<{
     ticker: string
     name: string
-    assetClass: 'stock' | 'crypto'
+    assetClass: 'stock'
     price: number
     change: number
     historyChange: number
@@ -361,9 +361,9 @@ function hideAllResults(): void {
   loading.classList.add('hidden')
 }
 
-function formatPrice(value: number | undefined | null, decimals = 2, currency = 'BRL'): string {
+function formatPrice(value: number | undefined | null, decimals = 2): string {
   if (value == null) return 'N/A'
-  const prefix = currency === 'USD' ? 'US$' : 'R$'
+  const prefix = 'R$'
   return `${prefix} ${value.toFixed(decimals)}`
 }
 
@@ -425,7 +425,7 @@ function renderAnalysisResult(data: AnalyzeResponse): void {
   const addToWatchlistBtn = $<HTMLButtonElement>('add-to-watchlist-btn')
 
   resTicker.textContent = data.ticker
-  resPrice.textContent = formatPrice(data.quote.price, 2, data.quote.currency)
+  resPrice.textContent = formatPrice(data.quote.price, 2)
   resChange.textContent = formatPercent(data.quote.change)
   resChange.style.color = getChangeColor(data.quote.change)
   resRsi.textContent = data.rsi !== null ? data.rsi.toFixed(2) : 'N/A'
@@ -475,7 +475,7 @@ function renderPortfolioResult(data: PortfolioResponse): void {
     div.innerHTML = `
       <div class="portfolio-stock-header">
         <span class="portfolio-stock-ticker">${escapeHtml(stock.ticker)}</span>
-        <span class="portfolio-stock-price">${formatPrice(stock.price, 2, stock.assetClass === 'crypto' ? 'USD' : 'BRL')}</span>
+        <span class="portfolio-stock-price">${formatPrice(stock.price, 2)}</span>
       </div>
       <div class="portfolio-stock-stats">
         <span style="color: ${getChangeColor(stock.change)}">${formatPercent(stock.change)}</span>
@@ -853,7 +853,7 @@ researchBtn.addEventListener('click', async () => {
     return
   }
 
-  const ticker = input.value.trim().toUpperCase() || 'BTC-USD'
+  const ticker = input.value.trim().toUpperCase() || 'PETR4.SA'
   setLoading(true, 'Lendo notícias e papers...')
 
   try {
