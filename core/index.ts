@@ -19,7 +19,6 @@ import {
 
 const app = new Hono()
 
-const assetSchema = z.string().regex(/^[A-Z0-9]{2,12}([.-][A-Z0-9]{2,6})?$/, 'Invalid asset format (ex: PETR4.SA or BTC-USD)')
 const tickerSchema = z.string().regex(/^[A-Z0-9]{4,6}\.[A-Z]{2}$/, 'Invalid B3 ticker format (ex: PETR4.SA)')
 
 interface CacheEntry<T> {
@@ -66,7 +65,7 @@ const quoteCache = new CacheManager(5)
 const chartCache = new CacheManager(10)
 const signalCache = new CacheManager(30)
 
-type AssetClass = 'stock' | 'crypto'
+type AssetClass = 'stock'
 type SuggestedAction = 'buy' | 'hold' | 'sell'
 type ImpactLabel = 'bullish' | 'bearish' | 'neutral'
 
@@ -298,10 +297,10 @@ app.post('/api/analyze', async (c) => {
       return c.json({ error: 'Ticker is required', code: 'MISSING_TICKER' }, 400)
     }
 
-    const validation = assetSchema.safeParse(ticker)
+    const validation = tickerSchema.safeParse(ticker)
     if (!validation.success) {
       return c.json({
-        error: 'Invalid asset format. Use PETR4.SA, VALE3.SA, BTC-USD, ETH-USD, etc.',
+        error: 'Invalid asset format. Use B3 tickers like PETR4.SA, VALE3.SA, etc.',
         code: 'INVALID_TICKER'
       }, 400)
     }
@@ -320,7 +319,7 @@ app.post('/api/analyze', async (c) => {
     }
 
     const prompt = `
-Você é um assistente 24h de ações e cripto. Objetivo: maximizar lucro agressivamente e focar em estratégias de alto rendimento.
+Você é um assistente 24h de ações da B3. Objetivo: maximizar lucro agressivamente e focar em estratégias de alto rendimento.
 Ativo: ${snapshot.ticker} (${snapshot.assetClass})
 Preço: ${snapshot.price} | variação diária: ${snapshot.change?.toFixed(2) || 'N/A'}%
 30D: ${snapshot.historyChange.toFixed(2)}% | RSI: ${snapshot.rsi?.toFixed(2) || 'N/A'}
@@ -426,10 +425,6 @@ const MARKET_UNIVERSE: MarketAsset[] = [
   { ticker: 'RADL3.SA', name: 'Raia Drogasil ON', assetClass: 'stock', thesis: 'saude, varejo defensivo e expansao' },
   { ticker: 'VIVT3.SA', name: 'Telefonica Brasil ON', assetClass: 'stock', thesis: 'telecom, dividendos e defensivo' },
   { ticker: 'TAEE11.SA', name: 'Taesa Unit', assetClass: 'stock', thesis: 'transmissao, dividendos e inflacao' },
-  { ticker: 'BTC-USD', name: 'Bitcoin', assetClass: 'crypto', thesis: 'cripto reserva digital, liquidez global e halving' },
-  { ticker: 'ETH-USD', name: 'Ethereum', assetClass: 'crypto', thesis: 'smart contracts, staking e atividade on-chain' },
-  { ticker: 'SOL-USD', name: 'Solana', assetClass: 'crypto', thesis: 'alta beta cripto, apps e uso de rede' },
-  { ticker: 'BNB-USD', name: 'BNB', assetClass: 'crypto', thesis: 'exchange token, fees e ecossistema' },
 ]
 
 const CONCURRENCY_LIMIT = 5
@@ -534,12 +529,12 @@ export async function buildPortfolio() {
     ).join('\n')
 
     const prompt = `
-Você é um assistente 24h de ações e cripto. Objetivo: maximizar lucro agressivamente e focar em estratégias de alto rendimento.
+Você é um assistente 24h de ações da B3. Objetivo: maximizar lucro agressivamente e focar em estratégias de alto rendimento.
 
 Dados dos ativos disponíveis:
 ${quotesSummary}
 
-Selecione 3 a 5 oportunidades entre ações e cripto com:
+Selecione 3 a 5 oportunidades entre ações com:
 - tese clara
 - catalisador monitorável
 - limite de risco
@@ -564,7 +559,7 @@ Responda em português, formato Markdown.
       aiSource = 'fallback'
 
       const ranked = [...quotes].sort((a, b) => b.score - a.score)
-      aiResponse = `**Radar automático ações + cripto**\n\n`
+      aiResponse = `**Radar automático ações da B3**\n\n`
       ranked.slice(0, 5).forEach((q, i) => {
         aiResponse += `${i + 1}. **${q.ticker}** (${q.assetClass}) - ${q.action.toUpperCase()} | score ${q.score}/100 | risco ${q.risk} | impacto ${q.newsImpact.label}/${q.newsImpact.score} | 30D ${q.historyChange.toFixed(1)}% | RSI ${q.rsi?.toFixed(0) || 'N/A'}.\n`
       })
@@ -638,7 +633,7 @@ app.get('/api/training', async (c) => {
 app.get('/api/research/:ticker', async (c) => {
   try {
     const ticker = normalizeAsset(c.req.param('ticker'))
-    const validation = assetSchema.safeParse(ticker)
+    const validation = tickerSchema.safeParse(ticker)
     if (!validation.success) {
       return c.json({ error: 'Invalid asset format', code: 'INVALID_TICKER' }, 400)
     }
@@ -850,7 +845,7 @@ function normalizeAsset(input: string): string {
 }
 
 function getAssetClass(ticker: string): AssetClass {
-  return ticker.endsWith('-USD') ? 'crypto' : 'stock'
+  return 'stock'
 }
 
 function envList(name: string): string[] {
@@ -931,7 +926,6 @@ function scoreAsset(rsi: number | null, historyChange: number, dayChange: number
 }
 
 function classifyRisk(assetClass: AssetClass, rsi: number | null, historyChange: number): AssetSnapshot['risk'] {
-  if (assetClass === 'crypto') return 'high'
   if ((rsi != null && (rsi < 25 || rsi > 75)) || Math.abs(historyChange) > 18) return 'high'
   if ((rsi != null && (rsi < 35 || rsi > 65)) || Math.abs(historyChange) > 8) return 'medium'
   return 'low'
@@ -1023,7 +1017,7 @@ function parseResearchFeed(text: string, source: string, kind: ResearchItem['kin
 }
 
 function buildDefaultPaperFeed(asset: MarketAsset): string {
-  const assetTerm = asset.assetClass === 'crypto' ? 'bitcoin OR ethereum OR crypto' : 'financial markets OR portfolio management OR trading'
+  const assetTerm = 'financial markets OR portfolio management OR trading'
   const query = encodeURIComponent(`all:(${assetTerm}) OR cat:q-fin.PM OR cat:q-fin.TR`)
   return `https://export.arxiv.org/api/query?search_query=${query}&start=0&max_results=6&sortBy=submittedDate&sortOrder=descending`
 }

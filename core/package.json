@@ -11,7 +11,8 @@
     "train:all": "bun run collect && python3 training/trainer.py"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "^1.3.14",
+    "@types/node": "^26.1.1"
   },
   "peerDependencies": {
     "typescript": "^6.0.3"
