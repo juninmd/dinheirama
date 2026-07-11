@@ -319,7 +319,7 @@ app.post('/api/analyze', async (c) => {
     }
 
     const prompt = `
-Você é um assistente 24h de ações da B3. Objetivo: maximizar lucro agressivamente e focar em estratégias de alto rendimento.
+Você é um assistente 24h de ações da B3. Objetivo: maximizar o lucro de forma muito agressiva e focar exclusivamente em estratégias de altíssimo rendimento.
 Ativo: ${snapshot.ticker} (${snapshot.assetClass})
 Preço: ${snapshot.price} | variação diária: ${snapshot.change?.toFixed(2) || 'N/A'}%
 30D: ${snapshot.historyChange.toFixed(2)}% | RSI: ${snapshot.rsi?.toFixed(2) || 'N/A'}
@@ -529,7 +529,7 @@ export async function buildPortfolio() {
     ).join('\n')
 
     const prompt = `
-Você é um assistente 24h de ações da B3. Objetivo: maximizar lucro agressivamente e focar em estratégias de alto rendimento.
+Você é um assistente 24h de ações da B3. Objetivo: maximizar o lucro de forma muito agressiva e focar exclusivamente em estratégias de altíssimo rendimento.
 
 Dados dos ativos disponíveis:
 ${quotesSummary}
@@ -563,7 +563,7 @@ Responda em português, formato Markdown.
       ranked.slice(0, 5).forEach((q, i) => {
         aiResponse += `${i + 1}. **${q.ticker}** (${q.assetClass}) - ${q.action.toUpperCase()} | score ${q.score}/100 | risco ${q.risk} | impacto ${q.newsImpact.label}/${q.newsImpact.score} | 30D ${q.historyChange.toFixed(1)}% | RSI ${q.rsi?.toFixed(0) || 'N/A'}.\n`
       })
-      aiResponse += `\n**Gestão:** buscar retornos altos agressivamente, focando em ganhos exponenciais e oportunidades de alto impacto.\n\n*Análise automática. Não é recomendação formal de investimento.*`
+      aiResponse += `\n**Gestão:** buscar retornos altíssimos e lucro de forma muito agressiva, priorizando ganhos exponenciais e oportunidades de alto impacto.\n\n*Análise automática. Não é recomendação formal de investimento.*`
     }
 
     log('info', 'Portfolio generation complete', { quotesCount: quotes.length, aiSource })
