@@ -425,6 +425,14 @@ const MARKET_UNIVERSE: MarketAsset[] = [
   { ticker: 'RADL3.SA', name: 'Raia Drogasil ON', assetClass: 'stock', thesis: 'saude, varejo defensivo e expansao' },
   { ticker: 'VIVT3.SA', name: 'Telefonica Brasil ON', assetClass: 'stock', thesis: 'telecom, dividendos e defensivo' },
   { ticker: 'TAEE11.SA', name: 'Taesa Unit', assetClass: 'stock', thesis: 'transmissao, dividendos e inflacao' },
+  { ticker: 'SUZB3.SA', name: 'Suzano ON', assetClass: 'stock', thesis: 'papel, celulose e dolar' },
+  { ticker: 'EQTL3.SA', name: 'Equatorial ON', assetClass: 'stock', thesis: 'energia, crescimento e turnaround' },
+  { ticker: 'CSNA3.SA', name: 'CSN ON', assetClass: 'stock', thesis: 'siderurgia, minerio e commodities' },
+  { ticker: 'LREN3.SA', name: 'Lojas Renner ON', assetClass: 'stock', thesis: 'varejo de moda e consumo' },
+  { ticker: 'BBSE3.SA', name: 'BB Seguridade ON', assetClass: 'stock', thesis: 'seguros, agro e dividendos' },
+  { ticker: 'CMIG4.SA', name: 'Cemig PN', assetClass: 'stock', thesis: 'energia, estatal e dividendos' },
+  { ticker: 'CPLE6.SA', name: 'Copel PNB', assetClass: 'stock', thesis: 'energia, privatizacao e turnaround' },
+  { ticker: 'CYRE3.SA', name: 'Cyrela ON', assetClass: 'stock', thesis: 'construcao civil e juros' },
 ]
 
 const CONCURRENCY_LIMIT = 5
