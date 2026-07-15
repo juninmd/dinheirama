@@ -902,7 +902,7 @@ function buildIntegrationStatus() {
 }
 
 function getAction(score: number): SuggestedAction {
-  if (score >= 65) return 'buy'
+  if (score >= 60) return 'buy'
   if (score <= 35) return 'sell'
   return 'hold'
 }
@@ -917,8 +917,8 @@ function scoreAsset(rsi: number | null, historyChange: number, dayChange: number
     else if (rsi > 65) score -= 8
   }
 
-  if (historyChange > 12) score += 10
-  else if (historyChange > 4) score += 5
+  if (historyChange > 12) score += 15
+  else if (historyChange > 4) score += 8
   else if (historyChange < -18) score -= 12
   else if (historyChange < -8) score -= 6
 
@@ -928,7 +928,7 @@ function scoreAsset(rsi: number | null, historyChange: number, dayChange: number
   }
 
   if (signals.length > 0) score += Math.min(5, signals.length)
-  score += newsImpactScore
+  score += newsImpactScore * 1.5
 
   return Math.max(0, Math.min(100, Math.round(score)))
 }
