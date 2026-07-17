@@ -902,8 +902,8 @@ function buildIntegrationStatus() {
 }
 
 function getAction(score: number): SuggestedAction {
-  if (score >= 60) return 'buy'
-  if (score <= 35) return 'sell'
+  if (score >= 55) return 'buy'
+  if (score <= 40) return 'sell'
   return 'hold'
 }
 
@@ -911,14 +911,14 @@ function scoreAsset(rsi: number | null, historyChange: number, dayChange: number
   let score = 50
 
   if (rsi != null) {
-    if (rsi < 30) score += 18
-    else if (rsi < 45) score += 8
-    else if (rsi > 75) score -= 18
-    else if (rsi > 65) score -= 8
+    if (rsi > 70) score += 15
+    else if (rsi > 60) score += 8
+    else if (rsi < 30) score -= 15
+    else if (rsi < 40) score -= 8
   }
 
-  if (historyChange > 12) score += 15
-  else if (historyChange > 4) score += 8
+  if (historyChange > 12) score += 20
+  else if (historyChange > 4) score += 10
   else if (historyChange < -18) score -= 12
   else if (historyChange < -8) score -= 6
 
@@ -934,20 +934,20 @@ function scoreAsset(rsi: number | null, historyChange: number, dayChange: number
 }
 
 function classifyRisk(assetClass: AssetClass, rsi: number | null, historyChange: number): AssetSnapshot['risk'] {
-  if ((rsi != null && (rsi < 25 || rsi > 75)) || Math.abs(historyChange) > 18) return 'high'
-  if ((rsi != null && (rsi < 35 || rsi > 65)) || Math.abs(historyChange) > 8) return 'medium'
+  if ((rsi != null && (rsi < 25 || rsi > 85)) || Math.abs(historyChange) > 25) return 'high'
+  if ((rsi != null && (rsi < 35 || rsi > 75)) || Math.abs(historyChange) > 15) return 'medium'
   return 'low'
 }
 
 function buildRationale(snapshot: Omit<AssetSnapshot, 'score' | 'action' | 'risk' | 'rationale'>): string[] {
   const rationale: string[] = []
-  if (snapshot.rsi != null && snapshot.rsi < 30) rationale.push(`RSI ${snapshot.rsi.toFixed(0)} indica sobrevenda; entrada exige stop e confirmação.`)
-  if (snapshot.rsi != null && snapshot.rsi > 70) rationale.push(`RSI ${snapshot.rsi.toFixed(0)} indica sobrecompra; risco de realização subiu.`)
-  if (snapshot.historyChange > 8) rationale.push(`Força de 30 dias em ${snapshot.historyChange.toFixed(1)}%.`)
+  if (snapshot.rsi != null && snapshot.rsi < 30) rationale.push(`RSI ${snapshot.rsi.toFixed(0)} indica queda forte; evitar em estratégia de momentum.`)
+  if (snapshot.rsi != null && snapshot.rsi > 70) rationale.push(`RSI ${snapshot.rsi.toFixed(0)} indica forte momentum de alta; oportunidade agressiva.`)
+  if (snapshot.historyChange > 8) rationale.push(`Força de 30 dias em ${snapshot.historyChange.toFixed(1)}%. Alta rentabilidade.`)
   if (snapshot.historyChange < -8) rationale.push(`Queda de 30 dias em ${snapshot.historyChange.toFixed(1)}%; evitar faca caindo sem catalisador.`)
   if (snapshot.newsImpact.label !== 'neutral') rationale.push(`Sinais externos com leitura ${snapshot.newsImpact.label}.`)
   if (snapshot.signals.length > 0) rationale.push(`${snapshot.signals.length} sinal(is) externo(s) para checar impacto.`)
-  if (rationale.length === 0) rationale.push('Sem assimetria forte; manter em observação.')
+  if (rationale.length === 0) rationale.push('Sem forte indicativo de momentum; manter em observação.')
   return rationale
 }
 
