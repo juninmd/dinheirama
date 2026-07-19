@@ -433,6 +433,11 @@ const MARKET_UNIVERSE: MarketAsset[] = [
   { ticker: 'CMIG4.SA', name: 'Cemig PN', assetClass: 'stock', thesis: 'energia, estatal e dividendos' },
   { ticker: 'CPLE6.SA', name: 'Copel PNB', assetClass: 'stock', thesis: 'energia, privatizacao e turnaround' },
   { ticker: 'CYRE3.SA', name: 'Cyrela ON', assetClass: 'stock', thesis: 'construcao civil e juros' },
+  { ticker: 'ELET3.SA', name: 'Eletrobras ON', assetClass: 'stock', thesis: 'energia, privatizacao e eficiencia' },
+  { ticker: 'SBSP3.SA', name: 'Sabesp ON', assetClass: 'stock', thesis: 'saneamento, privatizacao e dividendos' },
+  { ticker: 'ASAI3.SA', name: 'Assai ON', assetClass: 'stock', thesis: 'varejo alimentar e expansao' },
+  { ticker: 'NTCO3.SA', name: 'Natura ON', assetClass: 'stock', thesis: 'cosmeticos, reestruturacao e consumo' },
+  { ticker: 'HAPV3.SA', name: 'Hapvida ON', assetClass: 'stock', thesis: 'saude, sinergias e crescimento' },
 ]
 
 const CONCURRENCY_LIMIT = 5
