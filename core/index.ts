@@ -320,6 +320,7 @@ app.post('/api/analyze', async (c) => {
 
     const prompt = `
 Você é um assistente 24h de ações da B3. Objetivo: maximizar o lucro de forma muito agressiva e focar exclusivamente em estratégias de altíssimo rendimento.
+Objetivo principal: montar um portfólio para ganhar muito dinheiro com estratégias ultra agressivas de altíssimo rendimento.
 Ativo: ${snapshot.ticker} (${snapshot.assetClass})
 Preço: ${snapshot.price} | variação diária: ${snapshot.change?.toFixed(2) || 'N/A'}%
 30D: ${snapshot.historyChange.toFixed(2)}% | RSI: ${snapshot.rsi?.toFixed(2) || 'N/A'}
@@ -543,6 +544,7 @@ export async function buildPortfolio() {
 
     const prompt = `
 Você é um assistente 24h de ações da B3. Objetivo: maximizar o lucro de forma muito agressiva e focar exclusivamente em estratégias de altíssimo rendimento.
+Objetivo principal: montar um portfólio para ganhar muito dinheiro com estratégias ultra agressivas de altíssimo rendimento.
 
 Dados dos ativos disponíveis:
 ${quotesSummary}
@@ -916,13 +918,13 @@ function scoreAsset(rsi: number | null, historyChange: number, dayChange: number
   let score = 50
 
   if (rsi != null) {
-    if (rsi > 70) score += 15
+    if (rsi > 70) score += 25
     else if (rsi > 60) score += 8
     else if (rsi < 30) score -= 15
     else if (rsi < 40) score -= 8
   }
 
-  if (historyChange > 12) score += 20
+  if (historyChange > 12) score += 30
   else if (historyChange > 4) score += 10
   else if (historyChange < -18) score -= 12
   else if (historyChange < -8) score -= 6
