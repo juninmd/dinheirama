@@ -211,7 +211,12 @@ async function fetchWithRetry<T>(
 
 app.use('*', cors())
 app.use('/*', serveStatic({ root: './public' }))
-app.get('*', serveStatic({ path: './public/index.html' }))
+// Fallback SPA: só para rotas de UI. Sem o guarda, ele responde index.html
+// antes de qualquer rota GET da API (/health, /api/*).
+app.get('*', async (c, next) => {
+  if (c.req.path === '/health' || c.req.path.startsWith('/api/')) return next()
+  return serveStatic({ path: './public/index.html' })(c, next)
+})
 
 app.get('/', (c) => {
   return c.text('B3 Stock Analyzer API')
