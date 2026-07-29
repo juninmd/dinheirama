@@ -50,12 +50,16 @@ O **Dinheirama** monitora um universo de ações brasileiras, calcula sinais té
 - `PAPER_FEEDS`: lista separada por vírgula de feeds de papers. Sem env, o backend tenta arXiv para finanças.
 - `TELEGRAM_BOT_TOKEN` e `TELEGRAM_CHAT_ID`: habilitam envio diário.
 - `NOTIFY_UTC_HOUR`: hora UTC do alerta diário. Default: `11`.
+- `MC_LOOKBACK_DAYS`: janela de histórico usada no Monte Carlo. Default: `365`.
+- `MC_RISK_FREE_RATE`: taxa livre de risco anual para o Sharpe simulado. Default: `0.105`.
 
 Use `.env.example` como contrato local. Em produção, injete valores via Secrets/ArgoCD; não versione `.env`.
 
 ## Fluxos
 
-- **Radar 24h:** `GET /api/portfolio` ranqueia ações por score, risco e impacto de sinais externos.
+- **Radar 24h:** `GET /api/portfolio` ranqueia ações por score, risco e impacto de sinais externos, já com a alocação ótima do Monte Carlo.
+- **Monte Carlo (ativo):** `GET /api/montecarlo/PETR4.SA?days=21&sims=5000&engine=bootstrap` simula caminhos de preço e devolve retorno esperado, percentis, prob. de lucro, VaR/CVaR 95%, drawdown mediano, Sharpe e fração de Kelly.
+- **Monte Carlo (carteira):** `GET /api/portfolio/montecarlo?days=21&sims=4000` reamostra dias históricos inteiros (preserva correlação) e testa milhares de alocações, retornando as carteiras agressiva, melhor Sharpe e defensiva + fronteira risco/retorno.
 - **Análise pontual:** `POST /api/analyze` aceita `{ "ticker": "PETR4.SA" }`.
 - **Treino:** `GET /api/training` gera cenários de comprar/manter/vender com contexto e resposta esperada.
 - **Pesquisa:** `GET /api/research/:ticker` lê fast-news, feeds de mercado e papers/arXiv para estimar impacto.

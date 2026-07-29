@@ -62,6 +62,10 @@
             <span class="btn-icon">🎓</span>
             Treinar Decisão
           </button>
+          <button id="montecarlo-btn" class="secondary-btn compact-btn">
+            <span class="btn-icon">🎲</span>
+            Monte Carlo
+          </button>
           <button id="research-btn" class="secondary-btn compact-btn">
             <span class="btn-icon">📚</span>
             Pesquisar Papers
@@ -141,6 +145,20 @@
           <div class="analysis-box">
             <h3>📈 Estratégia do Assistente</h3>
             <p id="portfolio-analysis" class="analysis-text"></p>
+          </div>
+        </section>
+
+        <section id="montecarlo-result" class="card portfolio-card hidden">
+          <div class="result-header">
+            <h2>🎲 Monte Carlo — Carteira Ótima</h2>
+            <span id="mc-meta" class="ai-badge"></span>
+          </div>
+
+          <div id="mc-candidates" class="portfolio-grid"></div>
+
+          <div class="analysis-box">
+            <h3>📊 Distribuição simulada por ativo</h3>
+            <div id="mc-assets" class="portfolio-grid"></div>
           </div>
         </section>
 

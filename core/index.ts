@@ -16,6 +16,8 @@ import {
   clearHistory,
   startAlertsCheckLoop
 } from './alerts-manager.ts'
+import { optimizePortfolio, simulateAsset } from './monte-carlo.ts'
+import type { AssetSeries, McAssetResult, McEngine, McPortfolioResult } from './monte-carlo.ts'
 
 const app = new Hono()
 
@@ -64,6 +66,7 @@ class CacheManager {
 const quoteCache = new CacheManager(5)
 const chartCache = new CacheManager(10)
 const signalCache = new CacheManager(30)
+const seriesCache = new CacheManager(180)
 
 type AssetClass = 'stock'
 type SuggestedAction = 'buy' | 'hold' | 'sell'
@@ -318,6 +321,9 @@ app.post('/api/analyze', async (c) => {
       return c.json({ error: 'Asset not found', code: 'NOT_FOUND' }, 404)
     }
 
+    const series = await fetchCloseSeries(ticker)
+    const monteCarlo = series ? simulateAsset(series, { days: 21, sims: 5000 }) : null
+
     const prompt = `
 Você é um assistente 24h de ações da B3. Objetivo: maximizar o lucro de forma muito agressiva e focar exclusivamente em estratégias de altíssimo rendimento.
 Objetivo principal: montar um portfólio para ganhar muito dinheiro com estratégias ultra agressivas de altíssimo rendimento.
@@ -326,13 +332,15 @@ Preço: ${snapshot.price} | variação diária: ${snapshot.change?.toFixed(2) ||
 30D: ${snapshot.historyChange.toFixed(2)}% | RSI: ${snapshot.rsi?.toFixed(2) || 'N/A'}
 Score proprietário: ${snapshot.score}/100 | ação sugerida: ${snapshot.action} | risco: ${snapshot.risk}
 Impacto de notícias/papers: ${snapshot.newsImpact.label} (${snapshot.newsImpact.score}) - ${snapshot.newsImpact.summary}
+${monteCarlo ? formatMcAsset(monteCarlo) : 'Monte Carlo: histórico insuficiente.'}
+${monteCarlo ? `Alvos de preço Monte Carlo: P5 ${monteCarlo.priceTargets.p5} | P50 ${monteCarlo.priceTargets.p50} | P95 ${monteCarlo.priceTargets.p95}` : ''}
 Sinais externos:
 ${snapshot.signals.length ? snapshot.signals.map(signal => `- ${signal.source}: ${signal.title}`).join('\n') : '- Nenhum sinal externo encontrado'}
 
 Responda em Markdown curto com:
-1. Decisão: comprar, manter ou vender.
-2. Tese em 3 bullets.
-3. Riscos e gatilhos de invalidação.
+1. Decisão: comprar, manter ou vender, usando a estatística Monte Carlo como critério principal.
+2. Tese em 3 bullets, citando probabilidade de lucro, retorno esperado e cauda (CVaR).
+3. Riscos e gatilhos de invalidação, com o alvo P5 como stop de tese.
 4. O que monitorar nas próximas 24h.
 `.trim()
 
@@ -354,6 +362,10 @@ Responda em Markdown curto com:
         `**Tese:** ${snapshot.rationale.join(' ')}`,
         '',
         `**Impacto externo:** ${snapshot.newsImpact.summary}.`,
+        '',
+        monteCarlo
+          ? `**Monte Carlo (${monteCarlo.days}d):** retorno médio ${monteCarlo.distribution.meanPct}%, prob. de lucro ${(monteCarlo.distribution.probProfit * 100).toFixed(0)}%, P95 ${monteCarlo.distribution.percentiles.p95}%, CVaR95 ${monteCarlo.distribution.cvar95Pct}%, alvo P50 R$ ${monteCarlo.priceTargets.p50} (veredito ${monteCarlo.verdict.toUpperCase()}).`
+          : '**Monte Carlo:** histórico insuficiente para simular.',
         '',
         `**Gatilho de invalidação:** queda forte com volume acima da média, notícia adversa ou perda do suporte recente.`,
         '',
@@ -400,6 +412,7 @@ Responda em Markdown curto com:
       analysis: aiResponse,
       aiSource,
       mlPrediction,
+      monteCarlo,
       timestamp: new Date().toISOString()
     })
 
@@ -542,6 +555,9 @@ export async function buildPortfolio() {
       `- ${q.ticker} (${q.assetClass}): ${q.price?.toFixed(2) || 'N/A'} | Diário ${q.change?.toFixed(2) || 'N/A'}% | 30D ${q.historyChange?.toFixed(2) || 'N/A'}% | RSI ${q.rsi?.toFixed(2) || 'N/A'} | score ${q.score} | ação ${q.action} | risco ${q.risk} | impacto ${q.newsImpact.label}/${q.newsImpact.score} | sinais ${q.signals.length}`
     ).join('\n')
 
+    const monteCarlo = await runMonteCarloPortfolio(quotes.map(q => q.ticker), { days: 21, sims: 4000, engine: 'bootstrap' })
+    log('info', 'Portfolio Monte Carlo', { available: monteCarlo !== null, assets: monteCarlo?.assets.length ?? 0 })
+
     const prompt = `
 Você é um assistente 24h de ações da B3. Objetivo: maximizar o lucro de forma muito agressiva e focar exclusivamente em estratégias de altíssimo rendimento.
 Objetivo principal: montar um portfólio para ganhar muito dinheiro com estratégias ultra agressivas de altíssimo rendimento.
@@ -549,12 +565,15 @@ Objetivo principal: montar um portfólio para ganhar muito dinheiro com estraté
 Dados dos ativos disponíveis:
 ${quotesSummary}
 
+${monteCarlo ? formatMcPortfolio(monteCarlo) : 'Monte Carlo indisponível (histórico insuficiente).'}
+
 Selecione 3 a 5 oportunidades entre ações com:
 - tese clara
 - catalisador monitorável
 - limite de risco
 - motivo para comprar, manter ou vender
 
+Use a alocação agressiva do Monte Carlo como base da carteira e justifique cada peso com a estatística simulada (retorno médio, P95, prob. de lucro, CVaR95).
 Monte um radar de alocação. Nunca prometa retorno. Use português e Markdown curto.
 
 Responda em português, formato Markdown.
@@ -578,6 +597,11 @@ Responda em português, formato Markdown.
       ranked.slice(0, 5).forEach((q, i) => {
         aiResponse += `${i + 1}. **${q.ticker}** (${q.assetClass}) - ${q.action.toUpperCase()} | score ${q.score}/100 | risco ${q.risk} | impacto ${q.newsImpact.label}/${q.newsImpact.score} | 30D ${q.historyChange.toFixed(1)}% | RSI ${q.rsi?.toFixed(0) || 'N/A'}.\n`
       })
+      if (monteCarlo) {
+        const aggressive = monteCarlo.best.aggressive
+        aiResponse += `\n**Alocação Monte Carlo (agressiva, ${monteCarlo.days}d):** ${aggressive.weights.map(w => `${w.ticker} ${(w.weight * 100).toFixed(1)}%`).join(', ')}\n`
+        aiResponse += `Retorno médio ${aggressive.distribution.meanPct}% | P95 ${aggressive.distribution.percentiles.p95}% | prob. de lucro ${(aggressive.distribution.probProfit * 100).toFixed(0)}% | CVaR95 ${aggressive.distribution.cvar95Pct}% | drawdown mediano ${aggressive.maxDrawdownP50Pct}%.\n`
+      }
       aiResponse += `\n**Gestão:** buscar retornos altíssimos e lucro de forma muito agressiva, priorizando ganhos exponenciais e oportunidades de alto impacto.\n\n*Análise automática. Não é recomendação formal de investimento.*`
     }
 
@@ -587,6 +611,7 @@ Responda em português, formato Markdown.
       portfolio: quotes,
       recommendation: aiResponse,
       aiSource,
+      monteCarlo,
       tickersAnalyzed: quotes.length,
       timestamp: new Date().toISOString()
     }
@@ -599,6 +624,123 @@ app.get('/api/portfolio', async (c) => {
   } catch (error: any) {
     log('error', 'Portfolio generation failed', { error: error.message })
     return c.json({ error: error.message, code: 'PORTFOLIO_ERROR' }, 500)
+  }
+})
+
+const MC_LOOKBACK_DAYS = Number(process.env.MC_LOOKBACK_DAYS ?? 365)
+
+function clampNumber(raw: string | undefined, fallback: number, min: number, max: number): number {
+  const value = Number(raw)
+  if (!Number.isFinite(value)) return fallback
+  return Math.max(min, Math.min(max, Math.round(value)))
+}
+
+function parseMcParams(c: { req: { query: (key: string) => string | undefined } }) {
+  const engineParam = c.req.query('engine')
+  return {
+    days: clampNumber(c.req.query('days'), 21, 1, 252),
+    sims: clampNumber(c.req.query('sims'), 5000, 200, 20000),
+    engine: (engineParam === 'gbm' ? 'gbm' : 'bootstrap') as McEngine,
+  }
+}
+
+/** Série de fechamentos para Monte Carlo (cache de 3h: histórico longo muda pouco). */
+async function fetchCloseSeries(ticker: string, lookbackDays = MC_LOOKBACK_DAYS): Promise<AssetSeries | null> {
+  const cacheKey = `series:${ticker}:${lookbackDays}`
+  const cached = seriesCache.get<AssetSeries>(cacheKey)
+  if (cached) return cached
+
+  try {
+    const period1 = new Date(Date.now() - lookbackDays * 864e5).toISOString().split('T')[0]!
+    const chart = await fetchWithTimeout(
+      fetchWithRetry(() => yahooFinance.chart(ticker, { period1 }), 1, 500),
+      12000
+    )
+    const closes = ((chart?.quotes as any[]) || [])
+      .map(quote => quote?.close)
+      .filter((close: unknown): close is number => typeof close === 'number' && close > 0)
+
+    if (closes.length < 31) return null
+
+    const series: AssetSeries = { ticker, closes }
+    seriesCache.set(cacheKey, series)
+    return series
+  } catch (error: any) {
+    log('warn', `Monte Carlo series fetch failed for ${ticker}`, { error: error.message })
+    return null
+  }
+}
+
+async function runMonteCarloPortfolio(
+  tickers: string[],
+  params: { days: number; sims: number; engine: McEngine }
+): Promise<McPortfolioResult | null> {
+  const seriesResults = await chunkedPromiseAll(tickers, ticker => fetchCloseSeries(ticker), CONCURRENCY_LIMIT)
+  const series = seriesResults.filter((item): item is AssetSeries => item !== null)
+  if (series.length < 2) return null
+  return optimizePortfolio(series, params)
+}
+
+function formatMcAsset(result: McAssetResult): string {
+  const dist = result.distribution
+  return `Monte Carlo ${result.days}d (${result.sims} simulações, ${result.engine}): retorno médio ${dist.meanPct}% | mediana ${dist.medianPct}% | P5 ${dist.percentiles.p5}% / P95 ${dist.percentiles.p95}% | prob. de lucro ${(dist.probProfit * 100).toFixed(0)}% | prob. de +10% ${(dist.probGain10 * 100).toFixed(0)}% | VaR95 ${dist.var95Pct}% | CVaR95 ${dist.cvar95Pct}% | drawdown mediano ${result.maxDrawdownP50Pct}% | Sharpe ${dist.sharpe} | Kelly ${result.kellyFraction} | vol anual ${result.volatility.annualized}% | veredito ${result.verdict}`
+}
+
+function formatMcPortfolio(result: McPortfolioResult): string {
+  const describe = (label: string, candidate: McPortfolioResult['best']['sharpe']) => {
+    const weights = candidate.weights.map(w => `${w.ticker} ${(w.weight * 100).toFixed(1)}%`).join(', ')
+    const dist = candidate.distribution
+    return `- ${label}: ${weights || 'n/d'} => retorno médio ${dist.meanPct}%, P95 ${dist.percentiles.p95}%, prob. de lucro ${(dist.probProfit * 100).toFixed(0)}%, CVaR95 ${dist.cvar95Pct}%, drawdown mediano ${candidate.maxDrawdownP50Pct}%, Sharpe ${dist.sharpe}`
+  }
+
+  return [
+    `Otimização Monte Carlo (${result.candidates} alocações testadas, ${result.sims} simulações, horizonte ${result.days} dias, ${result.samples} dias de histórico):`,
+    describe('Agressiva (máximo retorno com CVaR controlado)', result.best.aggressive),
+    describe('Melhor Sharpe', result.best.sharpe),
+    describe('Defensiva (menor cauda)', result.best.defensive),
+  ].join('\n')
+}
+
+app.get('/api/montecarlo/:ticker', async (c) => {
+  try {
+    const ticker = normalizeAsset(c.req.param('ticker'))
+    const validation = tickerSchema.safeParse(ticker)
+    if (!validation.success) {
+      return c.json({ error: 'Invalid ticker format', code: 'INVALID_TICKER' }, 400)
+    }
+
+    const params = parseMcParams(c)
+    const series = await fetchCloseSeries(ticker)
+    if (!series) {
+      return c.json({ error: 'Not enough history for Monte Carlo', code: 'MC_NO_HISTORY' }, 404)
+    }
+
+    const result = simulateAsset(series, params)
+    if (!result) {
+      return c.json({ error: 'Not enough history for Monte Carlo', code: 'MC_NO_HISTORY' }, 404)
+    }
+
+    log('info', `Monte Carlo done for ${ticker}`, { days: params.days, sims: params.sims, engine: params.engine })
+    return c.json({ ...result, generatedAt: new Date().toISOString() })
+  } catch (error: any) {
+    log('error', 'Monte Carlo failed', { error: error.message })
+    return c.json({ error: error.message, code: 'MONTECARLO_ERROR' }, 500)
+  }
+})
+
+app.get('/api/portfolio/montecarlo', async (c) => {
+  try {
+    const params = parseMcParams(c)
+    const result = await runMonteCarloPortfolio(MARKET_UNIVERSE.map(asset => asset.ticker), params)
+    if (!result) {
+      return c.json({ error: 'Not enough history for Monte Carlo', code: 'MC_NO_HISTORY' }, 404)
+    }
+
+    log('info', 'Monte Carlo portfolio done', { assets: result.assets.length, days: params.days, sims: params.sims })
+    return c.json({ ...result, generatedAt: new Date().toISOString() })
+  } catch (error: any) {
+    log('error', 'Monte Carlo portfolio failed', { error: error.message })
+    return c.json({ error: error.message, code: 'MONTECARLO_PORTFOLIO_ERROR' }, 500)
   }
 })
 

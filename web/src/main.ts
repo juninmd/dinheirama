@@ -52,6 +52,48 @@ interface PortfolioResponse {
   timestamp: string
 }
 
+interface McDistribution {
+  meanPct: number
+  medianPct: number
+  stdPct: number
+  percentiles: { p5: number; p25: number; p50: number; p75: number; p95: number }
+  probProfit: number
+  probGain10: number
+  probLoss10: number
+  var95Pct: number
+  cvar95Pct: number
+  sharpe: number
+}
+
+interface McCandidate {
+  label: string
+  weights: Array<{ ticker: string; weight: number }>
+  distribution: McDistribution
+  maxDrawdownP50Pct: number
+}
+
+interface MonteCarloResponse {
+  engine: 'bootstrap' | 'gbm'
+  days: number
+  sims: number
+  candidates: number
+  samples: number
+  assets: string[]
+  best: { sharpe: McCandidate; aggressive: McCandidate; defensive: McCandidate }
+  frontier: Array<{ riskPct: number; returnPct: number; sharpe: number }>
+  perAsset: Array<{
+    ticker: string
+    lastPrice: number
+    volatility: { annualized: number }
+    distribution: McDistribution
+    priceTargets: { p5: number; p50: number; p95: number }
+    maxDrawdownP50Pct: number
+    kellyFraction: number
+    verdict: 'buy' | 'hold' | 'sell'
+  }>
+  generatedAt: string
+}
+
 interface TrainingResponse {
   generatedAt: string
   drills: Array<{
@@ -119,6 +161,7 @@ const resultDiv = $<HTMLDivElement>('result')
 const errorDiv = $<HTMLDivElement>('error')
 const generatePortfolioBtn = $<HTMLButtonElement>('generate-portfolio-btn')
 const trainingBtn = $<HTMLButtonElement>('training-btn')
+const montecarloBtn = $<HTMLButtonElement>('montecarlo-btn')
 const researchBtn = $<HTMLButtonElement>('research-btn')
 const alertsBtn = $<HTMLButtonElement>('alerts-btn')
 const portfolioResultDiv = $<HTMLDivElement>('portfolio-result')
@@ -126,6 +169,10 @@ const portfolioStats = $<HTMLDivElement>('portfolio-stats')
 const portfolioAnalysis = $<HTMLParagraphElement>('portfolio-analysis')
 const trainingResultDiv = $<HTMLDivElement>('training-result')
 const trainingList = $<HTMLDivElement>('training-list')
+const montecarloResultDiv = $<HTMLDivElement>('montecarlo-result')
+const mcMeta = $<HTMLSpanElement>('mc-meta')
+const mcCandidates = $<HTMLDivElement>('mc-candidates')
+const mcAssets = $<HTMLDivElement>('mc-assets')
 const researchResultDiv = $<HTMLDivElement>('research-result')
 const researchSummary = $<HTMLParagraphElement>('research-summary')
 const researchList = $<HTMLDivElement>('research-list')
@@ -325,18 +372,21 @@ function setLoading(isLoading: boolean, message = 'Processando...'): void {
     resultDiv.classList.add('hidden')
     portfolioResultDiv.classList.add('hidden')
     trainingResultDiv.classList.add('hidden')
+    montecarloResultDiv.classList.add('hidden')
     researchResultDiv.classList.add('hidden')
     alertsResultDiv.classList.add('hidden')
     errorDiv.classList.add('hidden')
     btn.disabled = true
     generatePortfolioBtn.disabled = true
     trainingBtn.disabled = true
+    montecarloBtn.disabled = true
     researchBtn.disabled = true
     alertsBtn.disabled = true
   } else {
     btn.disabled = false
     generatePortfolioBtn.disabled = false
     trainingBtn.disabled = false
+    montecarloBtn.disabled = false
     researchBtn.disabled = false
     alertsBtn.disabled = false
   }
@@ -355,6 +405,7 @@ function hideAllResults(): void {
   resultDiv.classList.add('hidden')
   portfolioResultDiv.classList.add('hidden')
   trainingResultDiv.classList.add('hidden')
+  montecarloResultDiv.classList.add('hidden')
   researchResultDiv.classList.add('hidden')
   alertsResultDiv.classList.add('hidden')
   errorDiv.classList.add('hidden')
@@ -494,6 +545,73 @@ function renderPortfolioResult(data: PortfolioResponse): void {
     .replace(/\n/g, '<br/>')
 
   portfolioResultDiv.classList.remove('hidden')
+}
+
+function renderMonteCarloResult(data: MonteCarloResponse): void {
+  mcMeta.textContent = `🎲 ${data.sims} sims × ${data.candidates} carteiras | ${data.days}d`
+  mcCandidates.innerHTML = ''
+
+  const labels: Array<[keyof MonteCarloResponse['best'], string]> = [
+    ['aggressive', '🚀 Agressiva (máximo retorno)'],
+    ['sharpe', '⚖️ Melhor Sharpe'],
+    ['defensive', '🛡️ Defensiva (menor cauda)'],
+  ]
+
+  labels.forEach(([key, title]) => {
+    const candidate = data.best[key]
+    const dist = candidate.distribution
+    const weightsHtml = candidate.weights
+      .map(w => `<li>${escapeHtml(w.ticker)} — <b>${(w.weight * 100).toFixed(1)}%</b></li>`)
+      .join('')
+
+    const div = document.createElement('div')
+    div.className = 'portfolio-stock'
+    div.innerHTML = `
+      <div class="portfolio-stock-header">
+        <span class="portfolio-stock-ticker">${title}</span>
+        <span class="portfolio-stock-price" style="color: ${getChangeColor(dist.meanPct)}">${formatPercent(dist.meanPct)}</span>
+      </div>
+      <ul class="signal-list">${weightsHtml || '<li>Sem alocação</li>'}</ul>
+      <div class="portfolio-stock-stats">
+        <span>P5: ${formatPercent(dist.percentiles.p5)}</span>
+        <span>P95: ${formatPercent(dist.percentiles.p95)}</span>
+        <span>Lucro: ${(dist.probProfit * 100).toFixed(0)}%</span>
+      </div>
+      <div class="portfolio-stock-meta">
+        <span>CVaR95 ${formatPercent(dist.cvar95Pct)} | Drawdown ${formatPercent(candidate.maxDrawdownP50Pct)} | Sharpe <b>${dist.sharpe.toFixed(2)}</b></span>
+      </div>
+    `
+    mcCandidates.appendChild(div)
+  })
+
+  mcAssets.innerHTML = ''
+  data.perAsset.forEach(asset => {
+    const dist = asset.distribution
+    const div = document.createElement('div')
+    div.className = 'portfolio-stock'
+    div.innerHTML = `
+      <div class="portfolio-stock-header">
+        <span class="portfolio-stock-ticker">${escapeHtml(asset.ticker)}</span>
+        <span class="portfolio-stock-price">${formatPrice(asset.lastPrice)}</span>
+      </div>
+      <div class="portfolio-stock-stats">
+        <span style="color: ${getChangeColor(dist.meanPct)}">Médio: ${formatPercent(dist.meanPct)}</span>
+        <span>Alvo P50: ${formatPrice(asset.priceTargets.p50)}</span>
+        <span>Vol: ${formatPercent(asset.volatility.annualized)}</span>
+      </div>
+      <div class="portfolio-stock-stats">
+        <span>P5: ${formatPrice(asset.priceTargets.p5)}</span>
+        <span>P95: ${formatPrice(asset.priceTargets.p95)}</span>
+        <span>Lucro: ${(dist.probProfit * 100).toFixed(0)}%</span>
+      </div>
+      <div class="portfolio-stock-meta">
+        <span>${getActionLabel(asset.verdict)} | CVaR95 ${formatPercent(dist.cvar95Pct)} | Kelly ${(asset.kellyFraction * 100).toFixed(0)}%</span>
+      </div>
+    `
+    mcAssets.appendChild(div)
+  })
+
+  montecarloResultDiv.classList.remove('hidden')
 }
 
 function renderTrainingResult(data: TrainingResponse): void {
@@ -841,6 +959,41 @@ trainingBtn.addEventListener('click', async () => {
       showError('Erro de conexão com o servidor', 'NETWORK_ERROR')
     } else {
       showError(error.message, 'TRAINING_ERROR')
+    }
+  } finally {
+    setLoading(false)
+  }
+})
+
+montecarloBtn.addEventListener('click', async () => {
+  if (!isOnline) {
+    showToast('Você está offline', 'error')
+    return
+  }
+
+  setLoading(true, 'Simulando milhares de cenários (Monte Carlo)...')
+
+  try {
+    const response = await fetchWithRetry('/api/portfolio/montecarlo', {
+      method: 'GET'
+    }, 2, 1000)
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Erro ao rodar Monte Carlo')
+    }
+
+    renderMonteCarloResult(data)
+    showToast(`Monte Carlo pronto (${data.sims} simulações, ${data.assets.length} ativos)`, 'success')
+
+  } catch (error: any) {
+    if (!navigator.onLine) {
+      showError('Você está offline', 'NETWORK_ERROR')
+    } else if (error.name === 'TypeError') {
+      showError('Erro de conexão com o servidor', 'NETWORK_ERROR')
+    } else {
+      showError(error.message, 'MONTECARLO_ERROR')
     }
   } finally {
     setLoading(false)
