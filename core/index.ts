@@ -566,7 +566,6 @@ export async function buildPortfolio() {
     const prompt = `
 Você é um assistente 24h de ações da B3. Objetivo: maximizar o lucro de forma muito agressiva e focar exclusivamente em estratégias de altíssimo rendimento.
 Objetivo principal: montar um portfólio para ganhar muito dinheiro com estratégias ultra agressivas de altíssimo rendimento.
-
 Dados dos ativos disponíveis:
 ${quotesSummary}
 
@@ -688,7 +687,7 @@ async function runMonteCarloPortfolio(
 
 function formatMcAsset(result: McAssetResult): string {
   const dist = result.distribution
-  return `Monte Carlo ${result.days}d (${result.sims} simulações, ${result.engine}): retorno médio ${dist.meanPct}% | mediana ${dist.medianPct}% | P5 ${dist.percentiles.p5}% / P95 ${dist.percentiles.p95}% | prob. de lucro ${(dist.probProfit * 100).toFixed(0)}% | prob. de +10% ${(dist.probGain10 * 100).toFixed(0)}% | VaR95 ${dist.var95Pct}% | CVaR95 ${dist.cvar95Pct}% | drawdown mediano ${result.maxDrawdownP50Pct}% | Sharpe ${dist.sharpe} | Kelly ${result.kellyFraction} | vol anual ${result.volatility.annualized}% | veredito ${result.verdict}`
+  return `Monte Carlo ${result.days}d (${result.sims} simulações, ${result.engine}): retorno médio ${dist.meanPct}% | mediana ${dist.medianPct}% | P5 ${dist.percentiles.p5}% | P95 ${dist.percentiles.p95}% | prob. de lucro ${(dist.probProfit * 100).toFixed(0)}% | prob. de +10% ${(dist.probGain10 * 100).toFixed(0)}% | VaR95 ${dist.var95Pct}% | CVaR95 ${dist.cvar95Pct}% | drawdown mediano ${result.maxDrawdownP50Pct}% | Sharpe ${dist.sharpe} | Kelly ${result.kellyFraction} | vol anual ${result.volatility.annualized}% | veredito ${result.verdict}`
 }
 
 function formatMcPortfolio(result: McPortfolioResult): string {
