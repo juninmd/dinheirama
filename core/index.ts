@@ -16,6 +16,8 @@ import {
   clearHistory,
   startAlertsCheckLoop
 } from './alerts-manager.ts'
+import { optimizePortfolio, simulateAsset } from './monte-carlo.ts'
+import type { AssetSeries, McAssetResult, McEngine, McPortfolioResult } from './monte-carlo.ts'
 
 const app = new Hono()
 
@@ -64,8 +66,9 @@ class CacheManager {
 const quoteCache = new CacheManager(5)
 const chartCache = new CacheManager(10)
 const signalCache = new CacheManager(30)
+const seriesCache = new CacheManager(180)
 
-type AssetClass = 'stock' | 'crypto'
+type AssetClass = 'stock'
 type SuggestedAction = 'buy' | 'hold' | 'sell'
 type ImpactLabel = 'bullish' | 'bearish' | 'neutral'
 
@@ -208,7 +211,12 @@ async function fetchWithRetry<T>(
 
 app.use('*', cors())
 app.use('/*', serveStatic({ root: './public' }))
-app.get('*', serveStatic({ path: './public/index.html' }))
+// Fallback SPA: só para rotas de UI. Sem o guarda, ele responde index.html
+// antes de qualquer rota GET da API (/health, /api/*).
+app.get('*', async (c, next) => {
+  if (c.req.path === '/health' || c.req.path.startsWith('/api/')) return next()
+  return serveStatic({ path: './public/index.html' })(c, next)
+})
 
 app.get('/', (c) => {
   return c.text('B3 Stock Analyzer API')
@@ -300,7 +308,7 @@ app.post('/api/analyze', async (c) => {
     const validation = tickerSchema.safeParse(ticker)
     if (!validation.success) {
       return c.json({
-        error: 'Invalid B3 ticker format (ex: PETR4.SA)',
+        error: 'Invalid asset format. Use B3 tickers like PETR4.SA, VALE3.SA, etc.',
         code: 'INVALID_TICKER'
       }, 400)
     }
@@ -318,20 +326,26 @@ app.post('/api/analyze', async (c) => {
       return c.json({ error: 'Asset not found', code: 'NOT_FOUND' }, 404)
     }
 
+    const series = await fetchCloseSeries(ticker)
+    const monteCarlo = series ? simulateAsset(series, { days: 21, sims: 5000 }) : null
+
     const prompt = `
-Você é um assistente 24h especializado em ações da B3. Objetivo: maximizar lucros com uma estratégia agressiva de alto rendimento.
+Você é um assistente 24h de ações da B3. Objetivo: maximizar o lucro de forma muito agressiva e focar exclusivamente em estratégias de altíssimo rendimento.
+Objetivo principal: montar um portfólio para ganhar muito dinheiro com estratégias ultra agressivas de altíssimo rendimento.
 Ativo: ${snapshot.ticker} (${snapshot.assetClass})
 Preço: ${snapshot.price} | variação diária: ${snapshot.change?.toFixed(2) || 'N/A'}%
 30D: ${snapshot.historyChange.toFixed(2)}% | RSI: ${snapshot.rsi?.toFixed(2) || 'N/A'}
 Score proprietário: ${snapshot.score}/100 | ação sugerida: ${snapshot.action} | risco: ${snapshot.risk}
 Impacto de notícias/papers: ${snapshot.newsImpact.label} (${snapshot.newsImpact.score}) - ${snapshot.newsImpact.summary}
+${monteCarlo ? formatMcAsset(monteCarlo) : 'Monte Carlo: histórico insuficiente.'}
+${monteCarlo ? `Alvos de preço Monte Carlo: P5 ${monteCarlo.priceTargets.p5} | P50 ${monteCarlo.priceTargets.p50} | P95 ${monteCarlo.priceTargets.p95}` : ''}
 Sinais externos:
 ${snapshot.signals.length ? snapshot.signals.map(signal => `- ${signal.source}: ${signal.title}`).join('\n') : '- Nenhum sinal externo encontrado'}
 
 Responda em Markdown curto com:
-1. Decisão: comprar, manter ou vender.
-2. Tese em 3 bullets.
-3. Riscos e gatilhos de invalidação.
+1. Decisão: comprar, manter ou vender, usando a estatística Monte Carlo como critério principal.
+2. Tese em 3 bullets, citando probabilidade de lucro, retorno esperado e cauda (CVaR).
+3. Riscos e gatilhos de invalidação, com o alvo P5 como stop de tese.
 4. O que monitorar nas próximas 24h.
 `.trim()
 
@@ -353,6 +367,10 @@ Responda em Markdown curto com:
         `**Tese:** ${snapshot.rationale.join(' ')}`,
         '',
         `**Impacto externo:** ${snapshot.newsImpact.summary}.`,
+        '',
+        monteCarlo
+          ? `**Monte Carlo (${monteCarlo.days}d):** retorno médio ${monteCarlo.distribution.meanPct}%, prob. de lucro ${(monteCarlo.distribution.probProfit * 100).toFixed(0)}%, P95 ${monteCarlo.distribution.percentiles.p95}%, CVaR95 ${monteCarlo.distribution.cvar95Pct}%, alvo P50 R$ ${monteCarlo.priceTargets.p50} (veredito ${monteCarlo.verdict.toUpperCase()}).`
+          : '**Monte Carlo:** histórico insuficiente para simular.',
         '',
         `**Gatilho de invalidação:** queda forte com volume acima da média, notícia adversa ou perda do suporte recente.`,
         '',
@@ -399,6 +417,7 @@ Responda em Markdown curto com:
       analysis: aiResponse,
       aiSource,
       mlPrediction,
+      monteCarlo,
       timestamp: new Date().toISOString()
     })
 
@@ -425,6 +444,19 @@ const MARKET_UNIVERSE: MarketAsset[] = [
   { ticker: 'RADL3.SA', name: 'Raia Drogasil ON', assetClass: 'stock', thesis: 'saude, varejo defensivo e expansao' },
   { ticker: 'VIVT3.SA', name: 'Telefonica Brasil ON', assetClass: 'stock', thesis: 'telecom, dividendos e defensivo' },
   { ticker: 'TAEE11.SA', name: 'Taesa Unit', assetClass: 'stock', thesis: 'transmissao, dividendos e inflacao' },
+  { ticker: 'SUZB3.SA', name: 'Suzano ON', assetClass: 'stock', thesis: 'papel, celulose e dolar' },
+  { ticker: 'EQTL3.SA', name: 'Equatorial ON', assetClass: 'stock', thesis: 'energia, crescimento e turnaround' },
+  { ticker: 'CSNA3.SA', name: 'CSN ON', assetClass: 'stock', thesis: 'siderurgia, minerio e commodities' },
+  { ticker: 'LREN3.SA', name: 'Lojas Renner ON', assetClass: 'stock', thesis: 'varejo de moda e consumo' },
+  { ticker: 'BBSE3.SA', name: 'BB Seguridade ON', assetClass: 'stock', thesis: 'seguros, agro e dividendos' },
+  { ticker: 'CMIG4.SA', name: 'Cemig PN', assetClass: 'stock', thesis: 'energia, estatal e dividendos' },
+  { ticker: 'CPLE6.SA', name: 'Copel PNB', assetClass: 'stock', thesis: 'energia, privatizacao e turnaround' },
+  { ticker: 'CYRE3.SA', name: 'Cyrela ON', assetClass: 'stock', thesis: 'construcao civil e juros' },
+  { ticker: 'ELET3.SA', name: 'Eletrobras ON', assetClass: 'stock', thesis: 'energia, privatizacao e eficiencia' },
+  { ticker: 'SBSP3.SA', name: 'Sabesp ON', assetClass: 'stock', thesis: 'saneamento, privatizacao e dividendos' },
+  { ticker: 'ASAI3.SA', name: 'Assai ON', assetClass: 'stock', thesis: 'varejo alimentar e expansao' },
+  { ticker: 'NTCO3.SA', name: 'Natura ON', assetClass: 'stock', thesis: 'cosmeticos, reestruturacao e consumo' },
+  { ticker: 'HAPV3.SA', name: 'Hapvida ON', assetClass: 'stock', thesis: 'saude, sinergias e crescimento' },
 ]
 
 const CONCURRENCY_LIMIT = 5
@@ -528,18 +560,24 @@ export async function buildPortfolio() {
       `- ${q.ticker} (${q.assetClass}): ${q.price?.toFixed(2) || 'N/A'} | Diário ${q.change?.toFixed(2) || 'N/A'}% | 30D ${q.historyChange?.toFixed(2) || 'N/A'}% | RSI ${q.rsi?.toFixed(2) || 'N/A'} | score ${q.score} | ação ${q.action} | risco ${q.risk} | impacto ${q.newsImpact.label}/${q.newsImpact.score} | sinais ${q.signals.length}`
     ).join('\n')
 
-    const prompt = `
-Você é um assistente 24h especializado em ações da B3. Objetivo: maximizar lucros com uma estratégia agressiva de alto rendimento.
+    const monteCarlo = await runMonteCarloPortfolio(quotes.map(q => q.ticker), { days: 21, sims: 4000, engine: 'bootstrap' })
+    log('info', 'Portfolio Monte Carlo', { available: monteCarlo !== null, assets: monteCarlo?.assets.length ?? 0 })
 
+    const prompt = `
+Você é um assistente 24h de ações da B3. Objetivo: maximizar o lucro de forma muito agressiva e focar exclusivamente em estratégias de altíssimo rendimento.
+Objetivo principal: montar um portfólio para ganhar muito dinheiro com estratégias ultra agressivas de altíssimo rendimento.
 Dados dos ativos disponíveis:
 ${quotesSummary}
 
-Selecione 3 a 5 oportunidades de ações da B3 com:
+${monteCarlo ? formatMcPortfolio(monteCarlo) : 'Monte Carlo indisponível (histórico insuficiente).'}
+
+Selecione 3 a 5 oportunidades entre ações com:
 - tese clara
 - catalisador monitorável
 - limite de risco
 - motivo para comprar, manter ou vender
 
+Use a alocação agressiva do Monte Carlo como base da carteira e justifique cada peso com a estatística simulada (retorno médio, P95, prob. de lucro, CVaR95).
 Monte um radar de alocação. Nunca prometa retorno. Use português e Markdown curto.
 
 Responda em português, formato Markdown.
@@ -559,11 +597,16 @@ Responda em português, formato Markdown.
       aiSource = 'fallback'
 
       const ranked = [...quotes].sort((a, b) => b.score - a.score)
-      aiResponse = `**Radar automático de ações B3**\n\n`
+      aiResponse = `**Radar automático ações da B3**\n\n`
       ranked.slice(0, 5).forEach((q, i) => {
         aiResponse += `${i + 1}. **${q.ticker}** (${q.assetClass}) - ${q.action.toUpperCase()} | score ${q.score}/100 | risco ${q.risk} | impacto ${q.newsImpact.label}/${q.newsImpact.score} | 30D ${q.historyChange.toFixed(1)}% | RSI ${q.rsi?.toFixed(0) || 'N/A'}.\n`
       })
-      aiResponse += `\n**Gestão:** fracionar entrada, revisar sinais de fast-news/papers antes de aumentar posição.\n\n*Análise automática. Não é recomendação formal de investimento.*`
+      if (monteCarlo) {
+        const aggressive = monteCarlo.best.aggressive
+        aiResponse += `\n**Alocação Monte Carlo (agressiva, ${monteCarlo.days}d):** ${aggressive.weights.map(w => `${w.ticker} ${(w.weight * 100).toFixed(1)}%`).join(', ')}\n`
+        aiResponse += `Retorno médio ${aggressive.distribution.meanPct}% | P95 ${aggressive.distribution.percentiles.p95}% | prob. de lucro ${(aggressive.distribution.probProfit * 100).toFixed(0)}% | CVaR95 ${aggressive.distribution.cvar95Pct}% | drawdown mediano ${aggressive.maxDrawdownP50Pct}%.\n`
+      }
+      aiResponse += `\n**Gestão:** buscar retornos altíssimos e lucro de forma muito agressiva, priorizando ganhos exponenciais e oportunidades de alto impacto.\n\n*Análise automática. Não é recomendação formal de investimento.*`
     }
 
     log('info', 'Portfolio generation complete', { quotesCount: quotes.length, aiSource })
@@ -572,6 +615,7 @@ Responda em português, formato Markdown.
       portfolio: quotes,
       recommendation: aiResponse,
       aiSource,
+      monteCarlo,
       tickersAnalyzed: quotes.length,
       timestamp: new Date().toISOString()
     }
@@ -584,6 +628,123 @@ app.get('/api/portfolio', async (c) => {
   } catch (error: any) {
     log('error', 'Portfolio generation failed', { error: error.message })
     return c.json({ error: error.message, code: 'PORTFOLIO_ERROR' }, 500)
+  }
+})
+
+const MC_LOOKBACK_DAYS = Number(process.env.MC_LOOKBACK_DAYS ?? 365)
+
+function clampNumber(raw: string | undefined, fallback: number, min: number, max: number): number {
+  const value = Number(raw)
+  if (!Number.isFinite(value)) return fallback
+  return Math.max(min, Math.min(max, Math.round(value)))
+}
+
+function parseMcParams(c: { req: { query: (key: string) => string | undefined } }) {
+  const engineParam = c.req.query('engine')
+  return {
+    days: clampNumber(c.req.query('days'), 21, 1, 252),
+    sims: clampNumber(c.req.query('sims'), 5000, 200, 20000),
+    engine: (engineParam === 'gbm' ? 'gbm' : 'bootstrap') as McEngine,
+  }
+}
+
+/** Série de fechamentos para Monte Carlo (cache de 3h: histórico longo muda pouco). */
+async function fetchCloseSeries(ticker: string, lookbackDays = MC_LOOKBACK_DAYS): Promise<AssetSeries | null> {
+  const cacheKey = `series:${ticker}:${lookbackDays}`
+  const cached = seriesCache.get<AssetSeries>(cacheKey)
+  if (cached) return cached
+
+  try {
+    const period1 = new Date(Date.now() - lookbackDays * 864e5).toISOString().split('T')[0]!
+    const chart = await fetchWithTimeout(
+      fetchWithRetry(() => yahooFinance.chart(ticker, { period1 }), 1, 500),
+      12000
+    )
+    const closes = ((chart?.quotes as any[]) || [])
+      .map(quote => quote?.close)
+      .filter((close: unknown): close is number => typeof close === 'number' && close > 0)
+
+    if (closes.length < 31) return null
+
+    const series: AssetSeries = { ticker, closes }
+    seriesCache.set(cacheKey, series)
+    return series
+  } catch (error: any) {
+    log('warn', `Monte Carlo series fetch failed for ${ticker}`, { error: error.message })
+    return null
+  }
+}
+
+async function runMonteCarloPortfolio(
+  tickers: string[],
+  params: { days: number; sims: number; engine: McEngine }
+): Promise<McPortfolioResult | null> {
+  const seriesResults = await chunkedPromiseAll(tickers, ticker => fetchCloseSeries(ticker), CONCURRENCY_LIMIT)
+  const series = seriesResults.filter((item): item is AssetSeries => item !== null)
+  if (series.length < 2) return null
+  return optimizePortfolio(series, params)
+}
+
+function formatMcAsset(result: McAssetResult): string {
+  const dist = result.distribution
+  return `Monte Carlo ${result.days}d (${result.sims} simulações, ${result.engine}): retorno médio ${dist.meanPct}% | mediana ${dist.medianPct}% | P5 ${dist.percentiles.p5}% | P95 ${dist.percentiles.p95}% | prob. de lucro ${(dist.probProfit * 100).toFixed(0)}% | prob. de +10% ${(dist.probGain10 * 100).toFixed(0)}% | VaR95 ${dist.var95Pct}% | CVaR95 ${dist.cvar95Pct}% | drawdown mediano ${result.maxDrawdownP50Pct}% | Sharpe ${dist.sharpe} | Kelly ${result.kellyFraction} | vol anual ${result.volatility.annualized}% | veredito ${result.verdict}`
+}
+
+function formatMcPortfolio(result: McPortfolioResult): string {
+  const describe = (label: string, candidate: McPortfolioResult['best']['sharpe']) => {
+    const weights = candidate.weights.map(w => `${w.ticker} ${(w.weight * 100).toFixed(1)}%`).join(', ')
+    const dist = candidate.distribution
+    return `- ${label}: ${weights || 'n/d'} => retorno médio ${dist.meanPct}%, P95 ${dist.percentiles.p95}%, prob. de lucro ${(dist.probProfit * 100).toFixed(0)}%, CVaR95 ${dist.cvar95Pct}%, drawdown mediano ${candidate.maxDrawdownP50Pct}%, Sharpe ${dist.sharpe}`
+  }
+
+  return [
+    `Otimização Monte Carlo (${result.candidates} alocações testadas, ${result.sims} simulações, horizonte ${result.days} dias, ${result.samples} dias de histórico):`,
+    describe('Agressiva (máximo retorno com CVaR controlado)', result.best.aggressive),
+    describe('Melhor Sharpe', result.best.sharpe),
+    describe('Defensiva (menor cauda)', result.best.defensive),
+  ].join('\n')
+}
+
+app.get('/api/montecarlo/:ticker', async (c) => {
+  try {
+    const ticker = normalizeAsset(c.req.param('ticker'))
+    const validation = tickerSchema.safeParse(ticker)
+    if (!validation.success) {
+      return c.json({ error: 'Invalid ticker format', code: 'INVALID_TICKER' }, 400)
+    }
+
+    const params = parseMcParams(c)
+    const series = await fetchCloseSeries(ticker)
+    if (!series) {
+      return c.json({ error: 'Not enough history for Monte Carlo', code: 'MC_NO_HISTORY' }, 404)
+    }
+
+    const result = simulateAsset(series, params)
+    if (!result) {
+      return c.json({ error: 'Not enough history for Monte Carlo', code: 'MC_NO_HISTORY' }, 404)
+    }
+
+    log('info', `Monte Carlo done for ${ticker}`, { days: params.days, sims: params.sims, engine: params.engine })
+    return c.json({ ...result, generatedAt: new Date().toISOString() })
+  } catch (error: any) {
+    log('error', 'Monte Carlo failed', { error: error.message })
+    return c.json({ error: error.message, code: 'MONTECARLO_ERROR' }, 500)
+  }
+})
+
+app.get('/api/portfolio/montecarlo', async (c) => {
+  try {
+    const params = parseMcParams(c)
+    const result = await runMonteCarloPortfolio(MARKET_UNIVERSE.map(asset => asset.ticker), params)
+    if (!result) {
+      return c.json({ error: 'Not enough history for Monte Carlo', code: 'MC_NO_HISTORY' }, 404)
+    }
+
+    log('info', 'Monte Carlo portfolio done', { assets: result.assets.length, days: params.days, sims: params.sims })
+    return c.json({ ...result, generatedAt: new Date().toISOString() })
+  } catch (error: any) {
+    log('error', 'Monte Carlo portfolio failed', { error: error.message })
+    return c.json({ error: error.message, code: 'MONTECARLO_PORTFOLIO_ERROR' }, 500)
   }
 })
 
@@ -845,7 +1006,7 @@ function normalizeAsset(input: string): string {
 }
 
 function getAssetClass(ticker: string): AssetClass {
-  return ticker.endsWith('-USD') ? 'crypto' : 'stock'
+  return 'stock'
 }
 
 function envList(name: string): string[] {
@@ -894,8 +1055,8 @@ function buildIntegrationStatus() {
 }
 
 function getAction(score: number): SuggestedAction {
-  if (score >= 65) return 'buy'
-  if (score <= 35) return 'sell'
+  if (score >= 55) return 'buy'
+  if (score <= 40) return 'sell'
   return 'hold'
 }
 
@@ -903,14 +1064,14 @@ function scoreAsset(rsi: number | null, historyChange: number, dayChange: number
   let score = 50
 
   if (rsi != null) {
-    if (rsi < 30) score += 18
-    else if (rsi < 45) score += 8
-    else if (rsi > 75) score -= 18
-    else if (rsi > 65) score -= 8
+    if (rsi > 70) score += 25
+    else if (rsi > 60) score += 8
+    else if (rsi < 30) score -= 15
+    else if (rsi < 40) score -= 8
   }
 
-  if (historyChange > 12) score += 10
-  else if (historyChange > 4) score += 5
+  if (historyChange > 12) score += 30
+  else if (historyChange > 4) score += 10
   else if (historyChange < -18) score -= 12
   else if (historyChange < -8) score -= 6
 
@@ -920,27 +1081,26 @@ function scoreAsset(rsi: number | null, historyChange: number, dayChange: number
   }
 
   if (signals.length > 0) score += Math.min(5, signals.length)
-  score += newsImpactScore
+  score += newsImpactScore * 1.5
 
   return Math.max(0, Math.min(100, Math.round(score)))
 }
 
 function classifyRisk(assetClass: AssetClass, rsi: number | null, historyChange: number): AssetSnapshot['risk'] {
-  if (assetClass === 'crypto') return 'high'
-  if ((rsi != null && (rsi < 25 || rsi > 75)) || Math.abs(historyChange) > 18) return 'high'
-  if ((rsi != null && (rsi < 35 || rsi > 65)) || Math.abs(historyChange) > 8) return 'medium'
+  if ((rsi != null && (rsi < 25 || rsi > 85)) || Math.abs(historyChange) > 25) return 'high'
+  if ((rsi != null && (rsi < 35 || rsi > 75)) || Math.abs(historyChange) > 15) return 'medium'
   return 'low'
 }
 
 function buildRationale(snapshot: Omit<AssetSnapshot, 'score' | 'action' | 'risk' | 'rationale'>): string[] {
   const rationale: string[] = []
-  if (snapshot.rsi != null && snapshot.rsi < 30) rationale.push(`RSI ${snapshot.rsi.toFixed(0)} indica sobrevenda; entrada exige stop e confirmação.`)
-  if (snapshot.rsi != null && snapshot.rsi > 70) rationale.push(`RSI ${snapshot.rsi.toFixed(0)} indica sobrecompra; risco de realização subiu.`)
-  if (snapshot.historyChange > 8) rationale.push(`Força de 30 dias em ${snapshot.historyChange.toFixed(1)}%.`)
+  if (snapshot.rsi != null && snapshot.rsi < 30) rationale.push(`RSI ${snapshot.rsi.toFixed(0)} indica queda forte; evitar em estratégia de momentum.`)
+  if (snapshot.rsi != null && snapshot.rsi > 70) rationale.push(`RSI ${snapshot.rsi.toFixed(0)} indica forte momentum de alta; oportunidade agressiva.`)
+  if (snapshot.historyChange > 8) rationale.push(`Força de 30 dias em ${snapshot.historyChange.toFixed(1)}%. Alta rentabilidade.`)
   if (snapshot.historyChange < -8) rationale.push(`Queda de 30 dias em ${snapshot.historyChange.toFixed(1)}%; evitar faca caindo sem catalisador.`)
   if (snapshot.newsImpact.label !== 'neutral') rationale.push(`Sinais externos com leitura ${snapshot.newsImpact.label}.`)
   if (snapshot.signals.length > 0) rationale.push(`${snapshot.signals.length} sinal(is) externo(s) para checar impacto.`)
-  if (rationale.length === 0) rationale.push('Sem assimetria forte; manter em observação.')
+  if (rationale.length === 0) rationale.push('Sem forte indicativo de momentum; manter em observação.')
   return rationale
 }
 
@@ -1018,7 +1178,7 @@ function parseResearchFeed(text: string, source: string, kind: ResearchItem['kin
 }
 
 function buildDefaultPaperFeed(asset: MarketAsset): string {
-  const assetTerm = asset.assetClass === 'crypto' ? 'bitcoin OR ethereum OR crypto' : 'financial markets OR portfolio management OR trading'
+  const assetTerm = 'financial markets OR portfolio management OR trading'
   const query = encodeURIComponent(`all:(${assetTerm}) OR cat:q-fin.PM OR cat:q-fin.TR`)
   return `https://export.arxiv.org/api/query?search_query=${query}&start=0&max_results=6&sortBy=submittedDate&sortOrder=descending`
 }

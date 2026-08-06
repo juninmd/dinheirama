@@ -1,13 +1,13 @@
 # Dinheirama
 
-> Assistente 24h para ações e cripto com radar de oportunidades, IA local e sinais de notícias/papers.
+> Assistente 24h para ações da B3 com radar de oportunidades, IA local e sinais de notícias/papers.
 
 [![Deployment Status](https://img.shields.io/badge/ArgoCD-Synced-success?style=for-the-badge&logo=argocd)](https://argocd.antonio-code.duckdns.org)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 
 ## Descrição
 
-O **Dinheirama** monitora um universo de ações brasileiras e criptoativos, calcula sinais técnicos simples, cruza notícias/papers configuráveis e gera uma tese objetiva de comprar, manter ou vender. O foco é apoiar decisão, treino de análise e leitura de impacto de notícias, não executar ordens automaticamente.
+O **Dinheirama** monitora um universo de ações brasileiras, calcula sinais técnicos simples, cruza notícias/papers configuráveis e gera uma tese objetiva de comprar, manter ou vender. O foco é apoiar decisão, treino de análise e leitura de impacto de notícias, não executar ordens automaticamente.
 
 ## Tech Stack
 
@@ -47,16 +47,20 @@ O **Dinheirama** monitora um universo de ações brasileiras e criptoativos, cal
 - `OLLAMA_HOST`: host do Ollama. Default: `http://127.0.0.1:11434`.
 - `FAST_NEWS_URL`: base URL do fast-news. O Dinheirama consulta `/api/rag/search?q=...`.
 - `MARKET_NEWS_FEEDS`: lista separada por vírgula de feeds RSS/Atom.
-- `PAPER_FEEDS`: lista separada por vírgula de feeds de papers. Sem env, o backend tenta arXiv para finanças/cripto.
+- `PAPER_FEEDS`: lista separada por vírgula de feeds de papers. Sem env, o backend tenta arXiv para finanças.
 - `TELEGRAM_BOT_TOKEN` e `TELEGRAM_CHAT_ID`: habilitam envio diário.
 - `NOTIFY_UTC_HOUR`: hora UTC do alerta diário. Default: `11`.
+- `MC_LOOKBACK_DAYS`: janela de histórico usada no Monte Carlo. Default: `365`.
+- `MC_RISK_FREE_RATE`: taxa livre de risco anual para o Sharpe simulado. Default: `0.105`.
 
 Use `.env.example` como contrato local. Em produção, injete valores via Secrets/ArgoCD; não versione `.env`.
 
 ## Fluxos
 
-- **Radar 24h:** `GET /api/portfolio` ranqueia ações e cripto por score, risco e impacto de sinais externos.
-- **Análise pontual:** `POST /api/analyze` aceita `{ "ticker": "PETR4.SA" }` ou `{ "ticker": "BTC-USD" }`.
+- **Radar 24h:** `GET /api/portfolio` ranqueia ações por score, risco e impacto de sinais externos, já com a alocação ótima do Monte Carlo.
+- **Monte Carlo (ativo):** `GET /api/montecarlo/PETR4.SA?days=21&sims=5000&engine=bootstrap` simula caminhos de preço e devolve retorno esperado, percentis, prob. de lucro, VaR/CVaR 95%, drawdown mediano, Sharpe e fração de Kelly.
+- **Monte Carlo (carteira):** `GET /api/portfolio/montecarlo?days=21&sims=4000` reamostra dias históricos inteiros (preserva correlação) e testa milhares de alocações, retornando as carteiras agressiva, melhor Sharpe e defensiva + fronteira risco/retorno.
+- **Análise pontual:** `POST /api/analyze` aceita `{ "ticker": "PETR4.SA" }`.
 - **Treino:** `GET /api/training` gera cenários de comprar/manter/vender com contexto e resposta esperada.
 - **Pesquisa:** `GET /api/research/:ticker` lê fast-news, feeds de mercado e papers/arXiv para estimar impacto.
 - **Impacto de notícia/paper:** `FAST_NEWS_URL`, `MARKET_NEWS_FEEDS` e `PAPER_FEEDS` alimentam sinais externos e um viés `bullish`, `bearish` ou `neutral`.
