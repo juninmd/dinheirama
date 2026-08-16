@@ -1,0 +1,14 @@
+{"timestamp":"2026-08-16T16:17:18.398Z","level":"info","message":"Daily Telegram notify disabled (no TELEGRAM_* env)"}
+[serve] No ML model found, using fallback predictor
+{"timestamp":"2026-08-16T16:17:18.398Z","level":"info","message":"ML model init: fallback"}
+[alerts] Starting alerts checking daemon. Interval: 60s
+ 7 |       if (typeof entryNamespace?.default?.fet{"timestamp":"2026-08-16T16:17:26.071Z","level":"info","message":"Portfolio generation started"}
+{"timestamp":"2026-08-16T16:17:27.767Z","level":"info","message":"Portfolio: 25/29 assets loaded"}
+{"timestamp":"2026-08-16T16:17:32.091Z","level":"info","message":"Portfolio Monte Carlo","available":true,"assets":25}
+{"timestamp":"2026-08-16T16:17:32.097Z","level":"warn","message":"Ollama unavailable for portfolio","error":"Unable to connect. Is the computer able to access the url?"}
+{"timestamp":"2026-08-16T16:17:32.097Z","level":"info","message":"Portfolio generation complete","quotesCount":25,"aiSource":"fallback"}
+{"timestamp":"2026-08-16T16:19:34.035Z","level":"info","message":"Portfolio generation started"}
+{"timestamp":"2026-08-16T16:19:35.841Z","level":"info","message":"Portfolio: 25/29 assets loaded"}
+{"timestamp":"2026-08-16T16:19:39.342Z","level":"info","message":"Portfolio Monte Carlo","available":true,"assets":25}
+{"timestamp":"2026-08-16T16:19:39.349Z","level":"warn","message":"Ollama unavailable for portfolio","error":"Unable to connect. Is the computer able to access the url?"}
+{"timestamp":"2026-08-16T16:19:39.349Z","level":"info","message":"Portfolio generation complete","quotesCount":25,"aiSource":"fallback"}
