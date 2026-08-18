@@ -18,10 +18,10 @@
     "typescript": "^6.0.3"
   },
   "dependencies": {
-    "hono": "^4.12.10",
+    "hono": "^4.13.3",
     "ollama": "^0.6.3",
     "tough-cookie": "^6.0.2",
-    "yahoo-finance2": "^3.14.0",
-    "zod": "^3.23.8"
+    "yahoo-finance2": "^4.0.2",
+    "zod": "^4.4.3"
   }
 }

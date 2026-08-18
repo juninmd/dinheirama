@@ -1,0 +1,19 @@
+{"timestamp":"2026-08-18T16:08:06.937Z","level":"info","message":"Daily Telegram notify disabled (no TELEGRAM_* env)"}
+[serve] No ML model found, using fallback predictor
+{"timestamp":"2026-08-18T16:08:06.937Z","level":"info","message":"ML model init: fallback"}
+[alerts] Starting alerts checking daemon. Interval: 60s
+ 7 |       if (typeof entryNamespace?.default?.fetch === 'function')  {
+ 8 |         const server = Bun.serve(entryNamespace.default);
+ 9 |         console.debug(`Started ${server.development ? 'development ' : ''}server: ${server.protocol}://${server.hostname}:${server.port}`);
+10 |       }
+11 |    }, reportError);
+12 |    const server = Bun.serve(entryNamespace.default);
+                                ^
+error: Failed to start server. Is port 3000 in use?
+ syscall: "listen",
+   errno: 0,
+    code: "EADDRINUSE"
+
+      at bun:main:12:28
+
+Bun v1.2.14 (Linux x64 baseline)
