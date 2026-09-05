@@ -7,14 +7,20 @@ COPY web/ .
 RUN bun run build
 
 # Python Training Image
-FROM python:3.14-slim AS trainer
+# 3.12 e nao 3.14: numpy 2.2.4, pandas 2.2.3, scikit-learn 1.6.1 e onnx nao
+# publicam wheel cp314, entao no 3.14 o pip cai para build a partir do sdist.
+# Este estagio nunca chegou a ser exercitado porque o estagio final nao depende
+# dele e o BuildKit pula estagio nao alcancado -- por isso o erro so aparecia
+# em runtime, no CronJob de treino.
+FROM python:3.12-slim AS trainer
 WORKDIR /app
 
 RUN pip install --no-cache-dir \
     xgboost==3.0.0 \
     pandas==2.2.3 \
     numpy==2.2.4 \
-    scikit-learn==1.6.1
+    scikit-learn==1.6.1 \
+    onnx==1.22.0
 
 COPY core/training/trainer.py ./training/trainer.py
 
