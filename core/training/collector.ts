@@ -162,6 +162,48 @@ async function collectSample(ticker: string): Promise<TrainingSample | null> {
   }
 }
 
+const HORIZONS = [
+  ['return_1d', 1],
+  ['return_5d', 5],
+  ['return_20d', 20],
+] as const
+
+/**
+ * Preenche os labels de uma amostra a partir da serie de pregoes do ticker.
+ *
+ * O offset e por INDICE na serie, nao por data de calendario. A versao anterior
+ * fazia `futureDate.setDate(date + N)` e procurava essa data no mapa de precos:
+ * como sabado, domingo e feriado nao tem pregao, o horizonte caia num dia sem
+ * cotacao e o label ficava nulo. `return_5d` a partir de uma segunda caia
+ * sempre num sabado.
+ *
+ * Exportada para teste: e pura, nao toca na rede.
+ */
+export function labelsForSample(
+  dateKey: string,
+  tradingDays: readonly { date: string; close: number }[],
+): Partial<TrainingSample['labels']> {
+  const out: Partial<TrainingSample['labels']> = {}
+  const i = tradingDays.findIndex(d => d.date === dateKey)
+  if (i === -1) return out
+  const basePrice = tradingDays[i]!.close
+  if (!(basePrice > 0)) return out
+
+  for (const [horizon, days] of HORIZONS) {
+    const future = tradingDays[i + days]
+    if (!future || !(future.close > 0)) continue
+    const ret = ((future.close - basePrice) / basePrice) * 100
+    ;(out as any)[horizon] = ret
+    ;(out as any)[`action_${days}d`] = ret > 3 ? 'buy' : ret < -3 ? 'sell' : 'hold'
+  }
+  return out
+}
+
+/** true quando a amostra ainda nao tem o label do horizonte mais longo. */
+export function needsLabels(sample: TrainingSample): boolean {
+  return HORIZONS.some(([horizon]) => (sample.labels as any)[horizon] === null)
+}
+
 async function backfillLabels(samples: TrainingSample[]): Promise<TrainingSample[]> {
   const byTicker = new Map<string, TrainingSample[]>()
   for (const s of samples) {
@@ -170,35 +212,65 @@ async function backfillLabels(samples: TrainingSample[]): Promise<TrainingSample
   }
 
   for (const [ticker, tickerSamples] of byTicker) {
-    tickerSamples.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    if (!tickerSamples.some(needsLabels)) continue
     try {
       const chart = await fetchWithRetry(() => yahooFinance.chart(ticker, { period1: '2022-01-01' }))
-      const quotes = chart?.quotes || []
-      const priceMap = new Map(quotes.map(q => [new Date(q.date).toISOString().split('T')[0]!, q.close]))
-      
+      const tradingDays = (chart?.quotes || [])
+        .filter(q => q?.date && typeof q.close === 'number')
+        .map(q => ({ date: new Date(q.date).toISOString().split('T')[0]!, close: q.close as number }))
+        .sort((a, b) => a.date.localeCompare(b.date))
+
       for (const sample of tickerSamples) {
-        const date = sample.timestamp.split('T')[0]!
-        const basePrice = priceMap.get(date)
-        if (!basePrice) continue
-        
-        for (const [horizon, days] of [['return_1d', 1], ['return_5d', 5], ['return_20d', 20]] as const) {
-          const futureDate = new Date(date)
-          futureDate.setDate(futureDate.getDate() + days)
-          const futureKey = futureDate.toISOString().split('T')[0]!
-          const futurePrice = priceMap.get(futureKey)
-          
-          if (futurePrice && basePrice > 0) {
-            const ret = ((futurePrice - basePrice) / basePrice) * 100
-            ;(sample.labels as any)[horizon] = ret
-            ;(sample.labels as any)[`action_${days}d`] = ret > 3 ? 'buy' : ret < -3 ? 'sell' : 'hold'
-          }
-        }
+        const dateKey = sample.timestamp.split('T')[0]!
+        Object.assign(sample.labels, labelsForSample(dateKey, tradingDays))
       }
     } catch (error) {
       console.error(`Failed to backfill labels for ${ticker}:`, error)
     }
   }
   return samples
+}
+
+/**
+ * Re-rotula as amostras ja gravadas em disco.
+ *
+ * O backfill so rodava sobre as amostras coletadas no proprio dia, procurando
+ * precos de 1, 5 e 20 dias no FUTURO -- que ainda nao existiam. Resultado: todo
+ * `return_*d` ficava nulo para sempre e o trainer abortava com "Not enough
+ * labeled samples" (1083 amostras, 0 rotuladas em 05/09/2026). Agora, a cada
+ * coleta, os arquivos antigos sao reprocessados: o que ja tem pregao suficiente
+ * passado ganha o label.
+ */
+export async function relabelHistoricalFiles(outputDir: string): Promise<number> {
+  const fs = await import('fs')
+  const path = await import('path')
+
+  let files: string[]
+  try {
+    files = (await fs.promises.readdir(outputDir)).filter(f => f.endsWith('.jsonl')).sort()
+  } catch {
+    return 0
+  }
+
+  let updated = 0
+  for (const file of files) {
+    const full = path.join(outputDir, file)
+    const raw = await fs.promises.readFile(full, 'utf8')
+    const samples: TrainingSample[] = raw
+      .split('\n')
+      .filter(l => l.trim())
+      .map(l => JSON.parse(l))
+    if (!samples.some(needsLabels)) continue
+
+    const before = samples.filter(needsLabels).length
+    await backfillLabels(samples)
+    const after = samples.filter(needsLabels).length
+    if (after === before) continue
+
+    await fs.promises.writeFile(full, samples.map(s => JSON.stringify(s)).join('\n') + '\n')
+    updated += before - after
+  }
+  return updated
 }
 
 async function runCollection(): Promise<TrainingSample[]> {
@@ -235,6 +307,12 @@ async function saveSamples(samples: TrainingSample[]) {
 if (import.meta.main) {
   const samples = await runCollection()
   await saveSamples(samples)
+  // As amostras de hoje nascem sem label (o retorno futuro ainda nao existe);
+  // quem rotula e este passo, sobre os arquivos antigos que ja tem pregao
+  // suficiente depois deles.
+  const outputDir = process.env.TRAINING_DATA_DIR || '/data/training'
+  const relabeled = await relabelHistoricalFiles(outputDir)
+  console.log(`Relabeled ${relabeled} historical samples`)
   console.log('Collection complete')
 }
 
