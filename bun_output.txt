@@ -1,0 +1,7 @@
+$ bun run index.ts
+{"timestamp":"2026-09-17T16:22:11.136Z","level":"info","message":"Daily Telegram notify disabled (no TELEGRAM_* env)"}
+[serve] No ML model found, using fallback predictor
+{"timestamp":"2026-09-17T16:22:11.137Z","level":"info","message":"ML model init: fallback"}
+[alerts] Starting alerts checking daemon. Interval: 60s
+Started development server: http://localhost:3000
+error: script "start" was terminated by signal SIGTERM (Polite quit request)
