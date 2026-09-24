@@ -44,7 +44,9 @@ O **Dinheirama** monitora um universo de ações brasileiras, calcula sinais té
 
 ## Integrações
 
-- `OLLAMA_HOST`: host do Ollama. Default: `http://127.0.0.1:11434`.
+- `LITELLM_BASE_URL`: proxy LiteLLM (API OpenAI). Default: `http://litellm.ai.svc.cluster.local:4000/v1`.
+- `LITELLM_API_KEY`: virtual key do LiteLLM exclusiva do app (`user_id=dinheirama`).
+- `LLM_MODEL`: alias do LiteLLM. Default: `cloud/auto`.
 - `FAST_NEWS_URL`: base URL do fast-news. O Dinheirama consulta `/api/rag/search?q=...`.
 - `MARKET_NEWS_FEEDS`: lista separada por vírgula de feeds RSS/Atom.
 - `PAPER_FEEDS`: lista separada por vírgula de feeds de papers. Sem env, o backend tenta arXiv para finanças.

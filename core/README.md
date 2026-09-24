@@ -25,7 +25,9 @@ bun run start
 ## Env
 
 - Veja `.env.example`.
-- `OLLAMA_HOST`
+- `LITELLM_BASE_URL`
+- `LITELLM_API_KEY`
+- `LLM_MODEL`
 - `FAST_NEWS_URL`
 - `MARKET_NEWS_FEEDS`
 - `PAPER_FEEDS`
