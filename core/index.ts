@@ -4,7 +4,7 @@ import { cors } from 'hono/cors'
 import { z } from 'zod'
 import YahooFinance from 'yahoo-finance2'
 const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] })
-import { Ollama } from 'ollama'
+import { createLlm, llmConfigFromEnv } from './llm'
 import { initModel, predict, reloadModel, isModelLoaded } from './training/serve'
 import type { FeatureVector, ModelPrediction } from './training/serve'
 import {
@@ -175,7 +175,8 @@ function log(level: 'info' | 'warn' | 'error', message: string, data?: Record<st
   console.log(JSON.stringify(logEntry))
 }
 
-const ollama = new Ollama({ host: process.env.OLLAMA_HOST || 'http://127.0.0.1:11434' })
+const llmConfig = llmConfigFromEnv()
+const llm = createLlm(llmConfig)
 
 async function fetchWithTimeout<T>(promise: Promise<T>, timeoutMs = 8000): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined
@@ -350,16 +351,12 @@ Responda em Markdown curto com:
 `.trim()
 
     let aiResponse = ''
-    let aiSource = 'ollama'
+    let aiSource = 'litellm'
 
     try {
-      const ollamaResponse = await fetchWithTimeout(
-        ollama.generate({ model: 'llama3', prompt, stream: false }),
-        300000
-      )
-      aiResponse = ollamaResponse.response
-    } catch (ollamaError: any) {
-      log('warn', 'Ollama unavailable, using fallback', { error: ollamaError.message })
+      aiResponse = await fetchWithTimeout(llm.generate(prompt), 300000)
+    } catch (llmError: any) {
+      log('warn', 'LLM unavailable, using fallback', { error: llmError.message })
       aiSource = 'fallback'
       aiResponse = [
         `**Decisão:** ${snapshot.action.toUpperCase()} (${snapshot.score}/100, risco ${snapshot.risk}).`,
@@ -584,16 +581,12 @@ Responda em português, formato Markdown.
 `.trim()
 
     let aiResponse = ''
-    let aiSource = 'ollama'
+    let aiSource = 'litellm'
 
     try {
-      const ollamaResponse = await fetchWithTimeout(
-        ollama.generate({ model: 'llama3', prompt, stream: false }),
-        300000
-      )
-      aiResponse = ollamaResponse.response
-    } catch (ollamaError: any) {
-      log('warn', 'Ollama unavailable for portfolio', { error: ollamaError.message })
+      aiResponse = await fetchWithTimeout(llm.generate(prompt), 300000)
+    } catch (llmError: any) {
+      log('warn', 'LLM unavailable for portfolio', { error: llmError.message })
       aiSource = 'fallback'
 
       const ranked = [...quotes].sort((a, b) => b.score - a.score)
@@ -1018,15 +1011,15 @@ function buildIntegrationStatus() {
   const fastNewsConfigured = Boolean(process.env.FAST_NEWS_URL)
   const marketFeeds = envList('MARKET_NEWS_FEEDS')
   const paperFeeds = envList('PAPER_FEEDS')
-  const ollamaHost = process.env.OLLAMA_HOST || 'http://127.0.0.1:11434'
   const notifyUtcHour = Number(process.env.NOTIFY_UTC_HOUR ?? 11)
 
   return {
     generatedAt: new Date().toISOString(),
     integrations: {
-      ollama: {
-        configured: Boolean(ollamaHost),
-        host: ollamaHost.replace(/\/\/.*@/, '//redacted@'),
+      llm: {
+        configured: Boolean(llmConfig.apiKey),
+        host: llmConfig.baseUrl.replace(/\/\/.*@/, '//redacted@'),
+        model: llmConfig.model,
       },
       fastNews: {
         configured: fastNewsConfigured,
