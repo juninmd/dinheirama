@@ -18,18 +18,36 @@ const FORBIDDEN = [
   /imperd[ií]vel/i, /n[ãa]o tem como perder/i, /retorno assegurado/i, /dinheiro f[aá]cil/i,
 ]
 
-/** Extrai números de texto em pt-BR/en (1.234,56 | 12,5% | 3.5x | -4%). */
-export function extractNumbers(text: string): number[] {
-  const out: number[] = []
-  const re = /-?\d{1,3}(?:\.\d{3})+(?:,\d+)?|-?\d+(?:[.,]\d+)?/g
+export interface NumberToken {
+  value: number
+  /** Tem unidade colada (%, x, R$, p.p.): nunca é só numeração de lista. */
+  hasUnit: boolean
+}
+
+/**
+ * Extrai números de texto em pt-BR/en (1.234,56 | 12,5% | 3.5x | -4%). O hífen só é sinal quando não está
+ * colado a um caractere de palavra: "5-10 anos" são os números 5 e 10, não 5 e −10.
+ */
+export function extractNumberTokens(text: string): NumberToken[] {
+  const out: NumberToken[] = []
+  const re = /(?:(?<![\w])-)?(?:\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+(?:[.,]\d+)?)/g
   for (const match of text.matchAll(re)) {
     let raw = match[0]
     if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(raw)) raw = raw.replace(/\./g, '').replace(',', '.')
     else raw = raw.replace(',', '.')
     const value = Number(raw)
-    if (Number.isFinite(value)) out.push(value)
+    if (!Number.isFinite(value)) continue
+    const start = match.index ?? 0
+    const after = text.slice(start + match[0].length, start + match[0].length + 8)
+    const before = text.slice(Math.max(0, start - 3), start)
+    const hasUnit = /^\s?(%|x\b|×|p\.p\.|pp\b|vezes)/i.test(after) || /R\$\s?$/.test(before)
+    out.push({ value, hasUnit })
   }
   return out
+}
+
+export function extractNumbers(text: string): number[] {
+  return extractNumberTokens(text).map(t => t.value)
 }
 
 /** Gera variantes aceitáveis de cada número da ficha (fração↔percentual, arredondamentos). */
@@ -55,9 +73,10 @@ export function allowedNumbers(facts: FactLine[]): number[] {
   return Array.from(out)
 }
 
-function isIgnorable(value: number): boolean {
-  // numeração de listas/pequenos inteiros e anos não são afirmações quantitativas
-  if (Number.isInteger(value) && value >= 0 && value <= 10) return true
+function isIgnorable(token: NumberToken): boolean {
+  const { value, hasUnit } = token
+  // numeração de listas/pequenos inteiros e anos não são afirmações quantitativas (a menos que tenham unidade: "8%", "10x")
+  if (!hasUnit && Number.isInteger(value) && value >= 0 && value <= 10) return true
   if (Number.isInteger(value) && value >= 1990 && value <= 2100) return true
   return false
 }
@@ -71,8 +90,9 @@ export interface ValidationResult {
 export function validateExplanation(text: string, facts: FactLine[]): ValidationResult {
   const allowed = allowedNumbers(facts)
   const unsupported: number[] = []
-  extractNumbers(text).forEach(value => {
-    if (isIgnorable(value)) return
+  extractNumberTokens(text).forEach(token => {
+    if (isIgnorable(token)) return
+    const value = token.value
     const matches = allowed.some(a => Math.abs(a - value) <= Math.max(0.051, Math.abs(a) * 0.015))
     if (!matches) unsupported.push(value)
   })

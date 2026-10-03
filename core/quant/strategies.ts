@@ -2,7 +2,7 @@
 
 import { type Fundamentals } from './fundamentals.ts'
 import { type FactorInput, MIN_HISTORY_FOR_MOMENTUM, priceFactors, rsi, scoreUniverse } from './factors.ts'
-import { type PricePanel, averageDollarVolume } from './panel.ts'
+import { type PricePanel, averageDollarVolume, priceAt } from './panel.ts'
 
 export type Weights = Record<string, number>
 
@@ -15,7 +15,9 @@ export interface StrategyContext {
   /** Retorno livre de risco acumulado em 12 meses até t. */
   riskFree12m: number
   /** Fundamentos ponto-no-tempo (opcional). */
-  fundamentalsAt?: (ticker: string, date: string) => Fundamentals | null
+  fundamentalsAt?: (ticker: string, date: string, price: number | null) => Fundamentals | null
+  /** Pertencimento ao universo na data do sinal (universo histórico). */
+  isMember?: (ticker: string) => boolean
 }
 
 export interface Strategy {
@@ -39,6 +41,7 @@ export function eligibleTickers(ctx: StrategyContext, filter: UniverseFilter = D
   return panel.tickers.filter(ticker => {
     const col = panel.close[ticker]
     if (!col || typeof col[t] !== 'number') return false
+    if (ctx.isMember && !ctx.isMember(ticker)) return false
     const first = col.findIndex(v => typeof v === 'number')
     if (first < 0 || t - first + 1 < filter.minHistory) return false
     const adv = averageDollarVolume(panel, ticker, t)
@@ -56,7 +59,7 @@ function factorInputs(ctx: StrategyContext, tickers: string[]): FactorInput[] {
   return tickers.map(ticker => ({
     ticker,
     price: priceFactors(ctx.panel.close[ticker] as Array<number | null>, ctx.t),
-    fundamentals: ctx.fundamentalsAt ? ctx.fundamentalsAt(ticker, ctx.date) : null,
+    fundamentals: ctx.fundamentalsAt ? ctx.fundamentalsAt(ticker, ctx.date, priceAt(ctx.panel, ticker, ctx.t)) : null,
   }))
 }
 

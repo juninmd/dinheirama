@@ -16,6 +16,11 @@
       <span>⚠️ Você está offline</span>
     </div>
 
+    <div class="disclaimer-banner" role="note" aria-label="Aviso legal">
+      <span aria-hidden="true">⚠️</span>
+      <strong>Projeto pessoal e educacional. Não é recomendação de investimento.</strong>
+    </div>
+
     <div id="app">
       <header class="app-header">
         <div class="header-content">
@@ -65,6 +70,10 @@
           <button id="montecarlo-btn" class="secondary-btn compact-btn">
             <span class="btn-icon">🎲</span>
             Monte Carlo
+          </button>
+          <button id="quant-btn" class="secondary-btn compact-btn" aria-controls="quant-result">
+            <span class="btn-icon">🔬</span>
+            Pesquisa Quantitativa
           </button>
           <button id="research-btn" class="secondary-btn compact-btn">
             <span class="btn-icon">📚</span>
@@ -177,6 +186,17 @@
           <div id="research-list" class="research-list"></div>
         </section>
 
+        <section id="quant-result" class="card portfolio-card quant-card hidden" aria-labelledby="quant-title">
+          <div class="result-header">
+            <h2 id="quant-title">🔬 Pesquisa Quantitativa</h2>
+          </div>
+          <p class="quant-lead">
+            Fatores, backtest, carteira robusta, IPS e diário de decisões. Ferramentas para estudar e testar ideias,
+            sempre com as limitações à vista.
+          </p>
+          <div id="quant-root"></div>
+        </section>
+
         <section id="alerts-result" class="card portfolio-card hidden">
           <div class="result-header">
             <h2>🔔 Central de Alertas & Telegram</h2>
@@ -277,6 +297,7 @@
       </main>
 
       <footer class="app-footer">
+        <p class="footer-disclaimer"><strong>Projeto pessoal e educacional. Não é recomendação de investimento.</strong></p>
         <p>Dados: Yahoo Finance • IA: Ollama • fast-news/papers via env • Uso educacional</p>
       </footer>
     </div>

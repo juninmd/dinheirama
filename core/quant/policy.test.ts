@@ -204,3 +204,23 @@ describe('guarda do LLM', () => {
     expect(none.source).toBe('template')
   })
 })
+
+describe('guarda do LLM: números pequenos e intervalos (correções da revisão)', () => {
+  const facts: FactLine[] = [{ label: 'Score', display: '85/100', numbers: [85] }]
+
+  test('inteiro pequeno com unidade não é numeração: "8% ao ano" e "10x" reprovam', () => {
+    expect(validateExplanation('Retorno esperado de 8% ao ano.', facts).ok).toBe(false)
+    expect(validateExplanation('Alavancagem de 10x.', facts).ok).toBe(false)
+    expect(validateExplanation('Custo de R$ 7 por ordem.', facts).ok).toBe(false)
+  })
+
+  test('inteiro pequeno sem unidade segue ignorado (listas)', () => {
+    expect(validateExplanation('1. Ponto um. 2. Ponto dois. 3. Ponto três.', facts).ok).toBe(true)
+  })
+
+  test('hífen entre dígitos é intervalo, não sinal negativo', () => {
+    expect(extractNumbers('horizonte de 5-10 anos')).toEqual([5, 10])
+    expect(extractNumbers('queda de -4% e -7,5%')).toEqual([-4, -7.5])
+    expect(validateExplanation('No horizonte de 5-10 anos o score é 85.', facts).ok).toBe(true)
+  })
+})

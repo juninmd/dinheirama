@@ -19,6 +19,11 @@ export interface StatementYear {
   operatingCashFlow: number | null
   capex: number | null
   equity: number | null
+  /** Campos opcionais (presentes quando a fonte os fornece, ex.: CVM). */
+  cash?: number | null
+  shortTermDebt?: number | null
+  dividendsPaid?: number | null
+  depreciation?: number | null
 }
 
 export interface Fundamentals {
@@ -50,6 +55,8 @@ export interface Fundamentals {
   revenueGrowth: number | null
   earningsGrowth: number | null
   beta: number | null
+  /** Ações em circulação (sem tesouraria). Se presente, os múltiplos podem ser recalculados a qualquer preço (`repriceFundamentals`). */
+  shares?: number | null
   /** Demonstrações anuais, mais recente primeiro. */
   statements: StatementYear[]
 }
@@ -324,13 +331,103 @@ export function piotroskiFScore(f: Fundamentals): PiotroskiResult | null {
   return { score, available: evaluated.length, scaled: (score / evaluated.length) * 9, details }
 }
 
+
+// ---- Recomposição a partir de demonstrações (CVM) e re-precificação -------------------------------
+
+export interface StatementsBase {
+  ticker: string
+  asOf: string
+  availableAt?: string
+  isFinancial?: boolean
+}
+
+const growth = (cur: number | null | undefined, prev: number | null | undefined) =>
+  cur != null && prev != null && prev > 0 ? cur / prev - 1 : null
+
+/**
+ * Monta Fundamentals a partir de demonstrações anuais (mais recente primeiro) e do nº de ações.
+ * Campos que dependem do preço ficam nulos até `repriceFundamentals`.
+ */
+export function buildFundamentalsFromStatements(base: StatementsBase, statements: StatementYear[], shares: number | null): Fundamentals {
+  const cur = statements[0]
+  const prev = statements[1]
+  const debt = (cur?.shortTermDebt ?? 0) + (cur?.longTermDebt ?? 0)
+  const hasDebt = cur?.shortTermDebt != null || cur?.longTermDebt != null
+  const netDebt = hasDebt && cur?.cash != null ? debt - cur.cash : null
+  const ebitda = cur?.ebit != null && cur?.depreciation != null ? cur.ebit + Math.abs(cur.depreciation) : null
+  const fcf = cur?.operatingCashFlow != null && cur?.capex != null ? cur.operatingCashFlow - cur.capex : null
+  const positiveShares = shares && shares > 0 ? shares : null
+  return {
+    ticker: base.ticker,
+    asOf: base.asOf,
+    availableAt: base.availableAt,
+    isFinancial: base.isFinancial,
+    price: null,
+    marketCap: null,
+    enterpriseValue: null,
+    trailingPE: null,
+    priceToBook: null,
+    eps: positiveShares && cur?.netIncome != null ? cur.netIncome / positiveShares : null,
+    bookValuePerShare: positiveShares && cur?.equity != null ? cur.equity / positiveShares : null,
+    dividendYield: null,
+    payoutRatio: cur?.dividendsPaid != null && cur?.netIncome ? Math.abs(cur.dividendsPaid) / cur.netIncome : null,
+    roe: cur?.netIncome != null && cur?.equity ? cur.netIncome / cur.equity : null,
+    ebit: cur?.ebit ?? null,
+    ebitda,
+    netDebt,
+    currentRatio: cur?.currentAssets != null && cur?.currentLiabilities ? cur.currentAssets / cur.currentLiabilities : null,
+    debtToEquity: hasDebt && cur?.equity ? debt / cur.equity : null,
+    freeCashFlow: fcf,
+    operatingMargin: cur?.ebit != null && cur?.revenue ? cur.ebit / cur.revenue : null,
+    grossMargin: cur?.grossProfit != null && cur?.revenue ? cur.grossProfit / cur.revenue : null,
+    revenueGrowth: growth(cur?.revenue, prev?.revenue),
+    earningsGrowth: growth(cur?.netIncome, prev?.netIncome),
+    beta: null,
+    shares: positiveShares,
+    statements,
+  }
+}
+
+/** Recalcula os múltiplos que dependem do preço. Não altera a linha original. */
+export function repriceFundamentals(f: Fundamentals, price: number): Fundamentals {
+  const shares = f.shares ?? null
+  if (!shares || !(price > 0)) return f
+  const marketCap = price * shares
+  const dividends = f.statements[0]?.dividendsPaid
+  return {
+    ...f,
+    price,
+    marketCap,
+    enterpriseValue: f.netDebt !== null ? marketCap + f.netDebt : null,
+    trailingPE: f.eps !== null && f.eps > 0 ? price / f.eps : null,
+    priceToBook: f.bookValuePerShare !== null && f.bookValuePerShare > 0 ? price / f.bookValuePerShare : null,
+    dividendYield: dividends != null ? Math.abs(dividends) / shares / price : f.dividendYield,
+  }
+}
+
+/** Serialização para persistência em JSON (preserva demonstrações). */
+export function serializeFundamentals(rows: Fundamentals[]): string {
+  return JSON.stringify(rows)
+}
+
+export function deserializeFundamentals(text: string): Fundamentals[] {
+  const parsed = JSON.parse(text)
+  if (!Array.isArray(parsed)) throw new Error('JSON de fundamentos deve ser uma lista')
+  return parsed.filter((r): r is Fundamentals => typeof r?.ticker === 'string' && typeof r?.availableAt === 'string' && Array.isArray(r?.statements))
+}
+
 // ---- Ponto-no-tempo --------------------------------------------------------
 
 /** Fundamentos ponto-no-tempo: só devolve dados já divulgados (availableAt <= data). */
+let historyCounter = 0
+
 export class FundamentalsHistory {
   private readonly byTicker = new Map<string, Fundamentals[]>()
+  /** Identifica a versão carregada (entra na chave de cache dos backtests). */
+  readonly version: string
 
   constructor(rows: Fundamentals[]) {
+    this.version = `f${++historyCounter}:${rows.length}`
     for (const row of rows) {
       const list = this.byTicker.get(row.ticker) ?? []
       list.push(row)
@@ -345,8 +442,11 @@ export class FundamentalsHistory {
     return Array.from(this.byTicker.keys())
   }
 
-  /** Último dado divulgado até `date` (yyyy-mm-dd). */
-  asOf(ticker: string, date: string): Fundamentals | null {
+  /**
+   * Último dado divulgado até `date` (yyyy-mm-dd). Com `price` e `shares` na linha, os múltiplos que dependem
+   * de preço (P/L, P/VP, valor de mercado, EV, dividend yield) são recalculados ao preço da data pedida.
+   */
+  asOf(ticker: string, date: string, price?: number | null): Fundamentals | null {
     const list = this.byTicker.get(ticker)
     if (!list) return null
     let found: Fundamentals | null = null
@@ -354,7 +454,14 @@ export class FundamentalsHistory {
       if ((row.availableAt ?? row.asOf) <= date) found = row
       else break
     }
+    if (found && typeof price === 'number' && price > 0 && found.shares) return repriceFundamentals(found, price)
     return found
+  }
+
+  rowCount(): number {
+    let n = 0
+    for (const list of this.byTicker.values()) n += list.length
+    return n
   }
 }
 
@@ -384,13 +491,17 @@ export function parseFundamentalsCsv(text: string): { rows: Fundamentals[]; reje
   for (const line of lines.slice(1)) {
     const cells = line.split(sep).map(c => c.trim())
     const availableAt = cells[iAvail]
-    if (!availableAt || !/^\d{4}-\d{2}-\d{2}$/.test(availableAt)) {
+    const asOf = cells[iAsOf]
+    const isDate = (v: string | undefined): v is string => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v)
+    // rejeita datas inválidas e dados "divulgados antes do período a que se referem" (look-ahead)
+    if (!isDate(availableAt) || !isDate(asOf) || availableAt < asOf || !cells[iTicker]) {
       rejected++
       continue
     }
+    const rawTicker = (cells[iTicker] as string).trim().toUpperCase()
     const row: Fundamentals = {
-      ticker: cells[iTicker] as string,
-      asOf: cells[iAsOf] as string,
+      ticker: rawTicker.includes('.') ? rawTicker : `${rawTicker}.SA`,
+      asOf,
       availableAt,
       isFinancial: col('isFinancial') >= 0 ? cells[col('isFinancial')] === 'true' : undefined,
       price: null, marketCap: null, enterpriseValue: null, trailingPE: null, priceToBook: null, eps: null,

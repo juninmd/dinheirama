@@ -115,3 +115,145 @@ export function walkForwardSelect(
     probabilityOfOverfit: belowMedian / splits.length,
   }
 }
+
+// ---- PBO por CSCV (Bailey, Borwein, López de Prado, Zhu) -------------------
+
+export interface PboResult {
+  partitions: number
+  combinations: number
+  variants: number
+  /** Probabilidade de overfitting: fração das combinações em que o melhor da amostra fica na metade inferior fora dela. */
+  pbo: number
+  /** Mediana do logit do posto relativo OOS do melhor IS (logit < 0 => abaixo da mediana). */
+  medianLogit: number
+  /** Fração das combinações em que o melhor IS teve Sharpe OOS negativo. */
+  probOosLoss: number
+  /** Média do Sharpe (por período) do melhor IS, dentro e fora da amostra: a queda mede a degradação. */
+  meanIsSharpe: number
+  meanOosSharpe: number
+  /** Quantas vezes cada variante foi a melhor na amostra. */
+  selectionShare: Record<string, number>
+}
+
+interface BlockStats {
+  n: number
+  sum: number
+  sumSq: number
+}
+
+function sharpeFromBlocks(blocks: BlockStats[], chosen: number[]): number {
+  let n = 0
+  let sum = 0
+  let sumSq = 0
+  for (const i of chosen) {
+    const b = blocks[i] as BlockStats
+    n += b.n
+    sum += b.sum
+    sumSq += b.sumSq
+  }
+  if (n < 2) return 0
+  const m = sum / n
+  const variance = (sumSq - n * m * m) / (n - 1)
+  return variance > 1e-18 ? m / Math.sqrt(variance) : 0
+}
+
+function combinations(total: number, pick: number, limit: number): number[][] {
+  const out: number[][] = []
+  const current: number[] = []
+  const walk = (start: number) => {
+    if (out.length >= limit) return
+    if (current.length === pick) {
+      out.push([...current])
+      return
+    }
+    for (let i = start; i < total; i++) {
+      current.push(i)
+      walk(i + 1)
+      current.pop()
+      if (out.length >= limit) return
+    }
+  }
+  walk(0)
+  return out
+}
+
+/**
+ * Combinatorially Symmetric Cross-Validation: divide o período em S blocos contíguos, e para cada uma das
+ * C(S, S/2) divisões treino/teste escolhe a melhor variante no treino e mede seu posto fora da amostra.
+ * PBO alto (> ~0,5) indica que escolher "a melhor" variante do backtest tende a não generalizar.
+ */
+export function probabilityOfBacktestOverfitting(
+  variants: Record<string, number[]>,
+  partitions = 16,
+  maxCombinations = 20000
+): PboResult | null {
+  const names = Object.keys(variants)
+  if (names.length < 2) return null
+  const S = partitions % 2 === 0 ? partitions : partitions + 1
+  const T = Math.min(...names.map(k => (variants[k] as number[]).length))
+  const size = Math.floor(T / S)
+  if (size < 5) return null
+
+  const stats: BlockStats[][] = names.map(name => {
+    const r = variants[name] as number[]
+    return Array.from({ length: S }, (_, b) => {
+      let sum = 0
+      let sumSq = 0
+      for (let i = b * size; i < (b + 1) * size; i++) {
+        const x = r[i] as number
+        sum += x
+        sumSq += x * x
+      }
+      return { n: size, sum, sumSq }
+    })
+  })
+
+  const combos = combinations(S, S / 2, maxCombinations)
+  const logits: number[] = []
+  const selection = new Map<string, number>()
+  let oosLoss = 0
+  let isSum = 0
+  let oosSum = 0
+
+  for (const inSample of combos) {
+    const inSet = new Set(inSample)
+    const outSample = Array.from({ length: S }, (_, i) => i).filter(i => !inSet.has(i))
+    const isSharpes = stats.map(s => sharpeFromBlocks(s, inSample))
+    const oosSharpes = stats.map(s => sharpeFromBlocks(s, outSample))
+    let best = 0
+    for (let i = 1; i < names.length; i++) if ((isSharpes[i] as number) > (isSharpes[best] as number)) best = i
+
+    const bestOos = oosSharpes[best] as number
+    // posto relativo OOS do melhor IS (1 = pior ... N = melhor), empates pela metade
+    let below = 0
+    let ties = 0
+    for (let i = 0; i < names.length; i++) {
+      if (i === best) continue
+      if ((oosSharpes[i] as number) < bestOos) below++
+      else if ((oosSharpes[i] as number) === bestOos) ties++
+    }
+    const rank = below + ties / 2 + 1
+    const omega = rank / (names.length + 1)
+    logits.push(Math.log(omega / (1 - omega)))
+
+    selection.set(names[best] as string, (selection.get(names[best] as string) ?? 0) + 1)
+    if (bestOos < 0) oosLoss++
+    isSum += isSharpes[best] as number
+    oosSum += bestOos
+  }
+
+  const sortedLogits = [...logits].sort((a, b) => a - b)
+  const mid = Math.floor(sortedLogits.length / 2)
+  const median = sortedLogits.length % 2 ? (sortedLogits[mid] as number) : ((sortedLogits[mid - 1] as number) + (sortedLogits[mid] as number)) / 2
+  return {
+    partitions: S,
+    combinations: combos.length,
+    variants: names.length,
+    pbo: logits.filter(l => l <= 0).length / logits.length,
+    medianLogit: median,
+    probOosLoss: oosLoss / combos.length,
+    meanIsSharpe: isSum / combos.length,
+    meanOosSharpe: oosSum / combos.length,
+    selectionShare: Object.fromEntries(names.map(n => [n, (selection.get(n) ?? 0) / combos.length])),
+  }
+}

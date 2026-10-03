@@ -23,9 +23,10 @@ import * as path from 'path'
 import { createYahooMarketData } from './quant/data.ts'
 import { classifyRiskByVol, signalFromScore } from './quant/factors.ts'
 import type { FundamentalsHistory } from './quant/fundamentals.ts'
+import type { UniverseHistory } from './quant/universe.ts'
 import { Journal } from './quant/journal.ts'
 import { type FactLine, guardedExplain } from './quant/llm-guard.ts'
-import { IpsStore, loadPitFile, registerQuantRoutes } from './quant/routes.ts'
+import { IpsStore, loadPit, loadUniverseHistory, registerQuantRoutes } from './quant/routes.ts'
 import { type FactorTableRow, createQuantService } from './quant/service.ts'
 
 const app = new Hono()
@@ -204,13 +205,15 @@ const llm = createLlm(llmConfig)
 // ---- Camada quantitativa (fatores, backtest, carteira robusta, IPS, diário) ----
 const QUANT_RISK_FREE = Number(process.env.MC_RISK_FREE_RATE ?? 0.105)
 const QUANT_DATA_DIR = process.env.QUANT_DATA_DIR || process.env.ALERTS_DIR || path.join(import.meta.dir, '..', 'data')
-let pitHistory: FundamentalsHistory | null = loadPitFile(path.join(QUANT_DATA_DIR, 'fundamentals_pit.csv'))
+let pitHistory: FundamentalsHistory | null = loadPit(QUANT_DATA_DIR).history
+let universeHistory: UniverseHistory | null = loadUniverseHistory(QUANT_DATA_DIR)
 const marketData = createYahooMarketData(yahooFinance as any)
 const quantService = createQuantService({
   data: marketData,
   universe: MARKET_UNIVERSE,
   riskFreeAnnual: QUANT_RISK_FREE,
   getPit: () => pitHistory,
+  getUniverseHistory: () => universeHistory,
   log: (level, message, data) => log(level, message, data),
 })
 registerQuantRoutes(app, {
@@ -220,7 +223,10 @@ registerQuantRoutes(app, {
   ipsStore: new IpsStore(path.join(QUANT_DATA_DIR, 'ips.json')),
   riskFreeAnnual: QUANT_RISK_FREE,
   dataDir: QUANT_DATA_DIR,
+  cvmTickers: MARKET_UNIVERSE.map(asset => ({ ticker: asset.ticker, isFinancial: asset.isFinancial })),
   onPitChange: history => { pitHistory = history },
+  onUniverseHistoryChange: history => { universeHistory = history },
+  allowedOrigins: envList('ALLOWED_ORIGINS'),
   log: (level, message, data) => log(level, message, data),
 })
 

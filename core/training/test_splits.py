@@ -1,7 +1,7 @@
 import unittest
 from datetime import date, timedelta
 
-from splits import temporal_purged_split
+from splits import missing_classes, temporal_purged_split
 
 
 def make_timestamps(days=100, per_day=3):
@@ -42,6 +42,13 @@ class TemporalPurgedSplitTest(unittest.TestCase):
     def test_too_few_dates_raises(self):
         with self.assertRaises(ValueError):
             temporal_purged_split(make_timestamps(days=3))
+
+
+class MissingClassesTest(unittest.TestCase):
+    def test_reports_absent_classes(self):
+        self.assertEqual(missing_classes([1, 2, 2, 1]), [0])
+        self.assertEqual(missing_classes([0, 1, 2]), [])
+        self.assertEqual(missing_classes([]), [0, 1, 2])
 
 
 if __name__ == '__main__':

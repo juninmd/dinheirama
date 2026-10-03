@@ -50,13 +50,18 @@ describe('parsers de dados', () => {
       { date: new Date('2024-01-03T13:00:00Z'), close: 11 },
     ])!
     expect(s.dates).toEqual(['2024-01-02', '2024-01-03'])
-    expect(s.closes).toEqual([9.5, 11])
+    // com fechamento ajustado na série, linha sem ajuste vira lacuna (misturar criaria um salto falso)
+    expect(s.closes).toEqual([9.5, null])
+    // sem nenhum ajustado, usa o fechamento comum
+    expect(parseChartQuotes('A', [{ date: new Date('2024-01-02T13:00:00Z'), close: 10 }, { date: new Date('2024-01-03T13:00:00Z'), close: 11 }])!.closes).toEqual([10, 11])
+    // linha com data inválida é descartada sem derrubar o ticker
+    expect(parseChartQuotes('A', [{ date: 'xx', close: 1 }, { date: new Date('2024-01-02T13:00:00Z'), close: 2 }])!.dates).toEqual(['2024-01-02'])
     expect(parseChartQuotes('A', [])).toBeNull()
   })
 
   test('parseBcbDaily converte % ao dia em fração e ignora lixo', () => {
-    const m = parseBcbDaily([{ data: '02/01/2024', valor: '0.043739' }, { data: 'x', valor: '1' }, { data: '03/01/2024', valor: 'abc' }])
-    expect(m.size).toBe(1)
+    const m = parseBcbDaily([{ data: '02/01/2024', valor: '0.043739' }, { data: 'x', valor: '1' }, { data: '03/01/2024', valor: 'abc' }, { data: '04/01/2024', valor: '' }, { data: '05/01/2024', valor: null }])
+    expect(m.size).toBe(1) // vazio/nulo não vira CDI de 0%
     expect(m.get('2024-01-02')).toBeCloseTo(0.00043739, 10)
     expect(parseBcbDaily('nope').size).toBe(0)
   })

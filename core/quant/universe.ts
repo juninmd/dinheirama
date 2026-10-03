@@ -46,9 +46,79 @@ export const MARKET_UNIVERSE: UniverseAsset[] = [
   asset('ELET3.SA', 'Eletrobras ON', 'energia, privatizacao e eficiencia', 'Energia elétrica'),
   asset('SBSP3.SA', 'Sabesp ON', 'saneamento, privatizacao e dividendos', 'Saneamento'),
   asset('ASAI3.SA', 'Assai ON', 'varejo alimentar e expansao', 'Varejo'),
-  asset('NTCO3.SA', 'Natura ON', 'cosmeticos, reestruturacao e consumo', 'Consumo'),
+  // NTCO3 (Natura &Co Holding) foi substituída por NATU3 após a reorganização societária; confira se ainda negocia.
+  asset('NATU3.SA', 'Natura ON', 'cosmeticos, reestruturacao e consumo', 'Consumo'),
   asset('HAPV3.SA', 'Hapvida ON', 'saude, sinergias e crescimento', 'Saúde'),
 ]
 
 export const SECTOR_BY_TICKER: Record<string, string> = Object.fromEntries(MARKET_UNIVERSE.map(a => [a.ticker, a.sector]))
 export const FINANCIAL_TICKERS = new Set(MARKET_UNIVERSE.filter(a => a.isFinancial).map(a => a.ticker))
+
+// ---- Universo histórico (mitiga o viés de sobrevivência) ----------------------------------------------
+
+export interface MembershipRange {
+  ticker: string
+  /** yyyy-mm-dd, inclusivo. */
+  from: string
+  /** yyyy-mm-dd, inclusivo; null = ainda no universo. */
+  to: string | null
+}
+
+/** Normaliza para o formato do Yahoo (PETR4 → PETR4.SA). */
+export function normalizeTicker(raw: string): string {
+  const t = raw.trim().toUpperCase()
+  return t.includes('.') ? t : `${t}.SA`
+}
+
+/**
+ * Pertencimento ao universo por data. Tickers que NÃO constam no arquivo são membros o tempo todo (o arquivo só
+ * precisa listar quem entrou/saiu); tickers que constam só são membros dentro de algum intervalo.
+ */
+export class UniverseHistory {
+  private readonly byTicker = new Map<string, MembershipRange[]>()
+  /** Identifica a versão carregada (entra na chave de cache dos backtests). */
+  readonly version: string
+
+  constructor(ranges: MembershipRange[]) {
+    for (const r of ranges) this.byTicker.set(r.ticker, [...(this.byTicker.get(r.ticker) ?? []), r])
+    let hash = 5381
+    for (const ch of ranges.map(r => `${r.ticker}|${r.from}|${r.to ?? ''}`).join(';')) hash = ((hash << 5) + hash + ch.charCodeAt(0)) | 0
+    this.version = `u${ranges.length}:${(hash >>> 0).toString(36)}`
+  }
+
+  tickers(): string[] {
+    return Array.from(this.byTicker.keys())
+  }
+
+  isMember(ticker: string, date: string): boolean {
+    const ranges = this.byTicker.get(ticker)
+    if (!ranges) return true
+    return ranges.some(r => date >= r.from && (r.to === null || date <= r.to))
+  }
+}
+
+/** CSV `ticker,from,to` (to vazio = ainda membro). Linhas inválidas são rejeitadas e contadas. */
+export function parseUniverseHistoryCsv(text: string): { ranges: MembershipRange[]; rejected: number } {
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+  if (lines.length < 2) return { ranges: [], rejected: 0 }
+  const sep = (lines[0] as string).includes(';') ? ';' : ','
+  const header = (lines[0] as string).split(sep).map(h => h.trim().toLowerCase())
+  const iTicker = header.indexOf('ticker')
+  const iFrom = header.indexOf('from')
+  const iTo = header.indexOf('to')
+  if (iTicker < 0 || iFrom < 0) throw new Error('CSV precisa das colunas ticker e from (to é opcional)')
+  const isDate = (v: string | undefined): v is string => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v)
+  const ranges: MembershipRange[] = []
+  let rejected = 0
+  for (const line of lines.slice(1)) {
+    const cells = line.split(sep).map(c => c.trim())
+    const from = cells[iFrom]
+    const to = iTo >= 0 ? cells[iTo] : ''
+    if (!cells[iTicker] || !isDate(from) || (to && !isDate(to)) || (to && to < from)) {
+      rejected++
+      continue
+    }
+    ranges.push({ ticker: normalizeTicker(cells[iTicker] as string), from, to: to || null })
+  }
+  return { ranges, rejected }
+}

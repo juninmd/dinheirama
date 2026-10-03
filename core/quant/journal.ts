@@ -62,6 +62,12 @@ export class Journal {
     } catch (error) {
       console.error('[journal] erro ao ler diário:', error)
       this.entries = []
+      // preserva o arquivo ilegível antes que o próximo save() o sobrescreva
+      try {
+        fs.copyFileSync(this.file, `${this.file}.corrupt-${Date.now()}`)
+      } catch {
+        // sem permissão de escrita: nada a fazer
+      }
     }
   }
 

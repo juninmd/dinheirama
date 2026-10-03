@@ -30,7 +30,9 @@ bun run start
 - `GET /api/valuation/:ticker` DCF/DDM com cenários e sensibilidade
 - `GET|PUT|DELETE /api/ips` perfil do investidor (IPS) e restrições derivadas
 - `GET|POST /api/journal`, `DELETE /api/journal/:id`, `POST /api/journal/resolve`, `GET /api/journal/calibration` diário de decisões e calibração (Brier)
-- `GET|PUT /api/fundamentals/pit` fundamentos ponto-no-tempo em CSV (`ticker,asOf,availableAt,...`)
+- `POST /api/fundamentals/cvm/sync` (`{from,to}`), `PUT|GET /api/fundamentals/pit` fundamentos ponto-no-tempo (CVM DFP+FCA ou CSV `ticker,asOf,availableAt,...`)
+- `PUT|GET|DELETE /api/universe/history` pertencimento histórico ao universo (CSV `ticker,from,to`)
+- `POST /api/tax/report`, `GET /api/tax/rules`, `GET /api/tax/proventos` calculadora de IR (swing, day trade, ETF, FII), JCP e dividendos
 
 Metodologia, premissas e limitações: [`../docs/METODOLOGIA.md`](../docs/METODOLOGIA.md). Projeto pessoal e educacional; não é recomendação de investimento.
 
@@ -48,7 +50,7 @@ Metodologia, premissas e limitações: [`../docs/METODOLOGIA.md`](../docs/METODO
 - `NOTIFY_UTC_HOUR`
 - `MC_LOOKBACK_DAYS`
 - `MC_RISK_FREE_RATE`
-- `QUANT_DATA_DIR`, `DCF_RISK_FREE`, `DCF_EQUITY_RISK_PREMIUM`
+- `QUANT_DATA_DIR`, `DCF_RISK_FREE`, `DCF_EQUITY_RISK_PREMIUM`, `ALLOWED_ORIGINS`
 
 ## Testes
 

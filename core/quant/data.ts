@@ -35,6 +35,12 @@ class TtlCache {
     return hit.value as T
   }
   set(key: string, value: unknown): void {
+    if (this.store.size >= 500) {
+      // varre expirados; se ainda estiver cheio, descarta o mais antigo (chaves livres como /api/valuation/:ticker)
+      const now = Date.now()
+      for (const [k, v] of this.store) if (now - v.at > this.ttlMs) this.store.delete(k)
+      if (this.store.size >= 500) this.store.delete(this.store.keys().next().value as string)
+    }
     this.store.set(key, { at: Date.now(), value })
   }
 }
@@ -50,14 +56,17 @@ export function yearsAgoIso(years: number, now = new Date()): string {
 /** Converte a resposta de chart() do Yahoo em RawSeries (fechamento ajustado + volume). */
 export function parseChartQuotes(ticker: string, quotes: Loose[] | undefined | null): RawSeries | null {
   if (!quotes || quotes.length === 0) return null
+  // Se a série tem fechamento ajustado, só ele vale: misturar ajustado com não ajustado cria saltos falsos.
+  const hasAdjusted = quotes.some(q => typeof q?.adjclose === 'number')
   const dates: string[] = []
   const closes: Array<number | null> = []
   const volumes: Array<number | null> = []
   for (const q of quotes) {
-    if (!q?.date) continue
-    const price = typeof q.adjclose === 'number' ? q.adjclose : typeof q.close === 'number' ? q.close : null
-    dates.push(isoDate(q.date))
-    closes.push(price)
+    const when = q?.date ? new Date(q.date) : null
+    if (!when || Number.isNaN(when.getTime())) continue // linha com data inválida não derruba o ticker
+    const raw = hasAdjusted ? q.adjclose : q.close
+    dates.push(isoDate(when))
+    closes.push(typeof raw === 'number' && raw > 0 ? raw : null)
     volumes.push(typeof q.volume === 'number' ? q.volume : null)
   }
   return dates.length > 0 ? { ticker, dates, closes, volumes } : null
@@ -69,7 +78,9 @@ export function parseBcbDaily(json: unknown): Map<string, number> {
   if (!Array.isArray(json)) return out
   for (const row of json) {
     const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(row?.data ?? ''))
-    const value = Number(String(row?.valor ?? '').replace(',', '.'))
+    const text = String(row?.valor ?? '').trim()
+    if (text === '') continue // valor vazio não vira CDI de 0%
+    const value = Number(text.replace(',', '.'))
     if (m && Number.isFinite(value)) out.set(`${m[3]}-${m[2]}-${m[1]}`, value / 100)
   }
   return out

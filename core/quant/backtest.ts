@@ -31,9 +31,15 @@ export interface BacktestConfig {
   benchmarkName?: string
   /** Ignora variações menores que esta fração do patrimônio ao rebalancear. */
   rebalanceBand: number
-  fundamentalsAt?: (ticker: string, date: string) => Fundamentals | null
+  fundamentalsAt?: (ticker: string, date: string, price: number | null) => Fundamentals | null
   /** Primeira data (yyyy-mm-dd) de sinal permitida. */
   startDate?: string
+  /** Pertencimento ao universo na data (universo histórico). Ausente = todos os ativos do painel. */
+  universeAt?: (ticker: string, date: string) => boolean
+  /** Pregões consecutivos sem preço (além do preenchimento de lacunas) para tratar o ativo como deslistado. */
+  delistingStaleDays: number
+  /** Perda assumida na liquidação forçada de um ativo deslistado (premissa conservadora, sem dados de recuperação). */
+  delistingHaircut: number
 }
 
 export const DEFAULT_BACKTEST_CONFIG: BacktestConfig = {
@@ -44,6 +50,8 @@ export const DEFAULT_BACKTEST_CONFIG: BacktestConfig = {
   tax: DEFAULT_TAX_CONFIG,
   riskFreeAnnual: Number(process.env.MC_RISK_FREE_RATE ?? 0.105),
   rebalanceBand: 0.005,
+  delistingStaleDays: 20,
+  delistingHaircut: 0.3,
 }
 
 export interface BacktestSeries {
@@ -69,6 +77,10 @@ export interface BacktestResult {
   totalTax: number
   trades: number
   rebalances: number
+  /** Ativos liquidados à força por deixarem de ter cotação (deslistagem). */
+  delistings: number
+  /** Menor saldo de caixa observado (diagnóstico: o IR é reservado, então não deve ficar negativo). */
+  minCash: number
   avgPositions: number
   deflatedSharpe?: number
   equityCurve: Array<{ date: string; strategy: number; cdi: number; benchmark?: number }>
@@ -89,6 +101,8 @@ interface SimOutput {
   tradedValue: number
   positionsSum: number
   startIndex: number
+  delistings: number
+  minCash: number
 }
 
 function dailyRf(config: BacktestConfig, n: number): number[] {
@@ -133,6 +147,9 @@ function simulate(panel: PricePanel, strategy: Strategy, config: BacktestConfig,
   let rebalances = 0
   let tradedValue = 0
   let positionsSum = 0
+  let delistings = 0
+  let minCash = config.initialCapital
+  const staleDays = new Map<string, number>()
   let prevWeights: Weights = {}
 
   const equity: number[] = [config.initialCapital]
@@ -175,6 +192,27 @@ function simulate(panel: PricePanel, strategy: Strategy, config: BacktestConfig,
     cash *= 1 + (rf[i] as number)
     let value = markToMarket(i)
 
+    // ativo sem cotação por muitos pregões = deslistado: liquida com perda assumida (conservador)
+    for (const ticker of Array.from(shares.keys())) {
+      if (typeof panel.close[ticker]?.[i] === 'number') {
+        staleDays.delete(ticker)
+        continue
+      }
+      const stale = (staleDays.get(ticker) ?? 0) + 1
+      staleDays.set(ticker, stale)
+      if (stale >= config.delistingStaleDays) {
+        const qty = shares.get(ticker) as number
+        const px = (lastPrice.get(ticker) ?? 0) * (1 - config.delistingHaircut)
+        const pnl = book.sell(ticker, qty, px, 0)
+        cash += qty * px
+        monthPnl += pnl
+        shares.delete(ticker)
+        staleDays.delete(ticker)
+        delistings++
+      }
+    }
+    value = markToMarket(i)
+
     const signalIndex = execToSignal.get(i)
     if (signalIndex !== undefined) {
       rebalances++
@@ -185,6 +223,7 @@ function simulate(panel: PricePanel, strategy: Strategy, config: BacktestConfig,
         prevWeights,
         riskFree12m: rf12m(rf, signalIndex),
         fundamentalsAt: config.fundamentalsAt,
+        isMember: config.universeAt ? (ticker: string) => (config.universeAt as NonNullable<BacktestConfig['universeAt']>)(ticker, panel.dates[signalIndex] as string) : undefined,
       })
 
       const targetValue = new Map<string, number>()
@@ -232,7 +271,9 @@ function simulate(panel: PricePanel, strategy: Strategy, config: BacktestConfig,
         buys.push({ ticker, value: buyValue, rate: cost ? tradeCostRate(buyValue, averageDollarVolume(panel, ticker, i), cost) : 0, px })
       }
       const need = buys.reduce((a, b) => a + b.value * (1 + b.rate), 0)
-      const scale = need > 0 ? Math.min(1, Math.max(0, cash) / need) : 0
+      // reserva o IR do mês (apurado nas vendas acima): o caixa nunca fica negativo para pagá-lo
+      const taxReserve = tax ? monthlySwingTax({ sales: monthSales, realizedPnl: monthPnl }, lossCarry, tax).tax : 0
+      const scale = need > 0 ? Math.min(1, Math.max(0, cash - taxReserve) / need) : 0
       for (const b of buys) {
         const buyValue = b.value * scale
         if (buyValue <= 0) continue
@@ -253,6 +294,7 @@ function simulate(panel: PricePanel, strategy: Strategy, config: BacktestConfig,
     }
 
     positionsSum += shares.size
+    if (cash < minCash) minCash = cash
     const prev = equity[equity.length - 1] as number
     equity.push(value)
     rets.push(prev > 0 ? value / prev - 1 : 0)
@@ -279,6 +321,8 @@ function simulate(panel: PricePanel, strategy: Strategy, config: BacktestConfig,
     tradedValue,
     positionsSum,
     startIndex,
+    delistings,
+    minCash,
   }
 }
 
@@ -293,10 +337,12 @@ function downsample<T>(items: T[], max: number): T[] {
 
 export function standardCaveats(config: BacktestConfig, panel: PricePanel): string[] {
   const out = [
-    'Viés de sobrevivência: o universo é a lista atual de ações líquidas; empresas que deixaram de existir ou saíram do índice não entram.',
+    config.universeAt
+      ? 'Universo histórico informado pelo usuário: o viés de sobrevivência é limitado ao que o arquivo de pertencimento e os preços disponíveis cobrem.'
+      : 'Viés de sobrevivência: o universo é a lista atual de ações líquidas; empresas que deixaram de existir ou saíram do índice não entram.',
     'Retorno total via fechamento ajustado (proventos/splits do Yahoo); ajustes podem conter erros.',
     `Execução no fechamento ${config.executionLagDays} pregão(ões) após o sinal; custos e impacto são modelos simplificados.`,
-    'IR de swing trade simplificado (15%, isenção de R$ 20 mil em vendas/mês, compensação de prejuízos); não cobre day trade, JCP, fracionário e outras regras.',
+    'IR de swing trade simplificado (15%, isenção de R$ 20 mil em vendas/mês, compensação de prejuízos); o patrimônio final NÃO deduz IR diferido sobre ganhos ainda não realizados, nem tributa dividendos/JCP (use /api/tax/report para operações reais).',
     'Desempenho passado não prevê desempenho futuro; muitas variantes testadas inflam o Sharpe (veja o Sharpe deflacionado).',
   ]
   if (!config.fundamentalsAt) out.push('Fatores de valor/qualidade NÃO entram no backtest: não há fundamentos ponto-no-tempo carregados (evita look-ahead).')
@@ -330,6 +376,7 @@ export function runBacktest(panel: PricePanel, strategy: Strategy, partial: Part
     if (clean.length === net.returns.length + 1) benchReturns = simpleReturns(clean)
   }
   const caveats = standardCaveats(config, panel)
+  if (net.delistings > 0) caveats.push(`${net.delistings} ativo(s) deixaram de ter cotação e foram liquidados com perda assumida de ${(config.delistingHaircut * 100).toFixed(0)}% (premissa, sem dados de recuperação).`)
   if (config.benchmark && !benchReturns) caveats.push('Benchmark não cobre todo o período do backtest: comparação relativa omitida.')
 
   const years = net.returns.length / TRADING_DAYS_YEAR
@@ -367,6 +414,8 @@ export function runBacktest(panel: PricePanel, strategy: Strategy, partial: Part
     totalTax: net.taxes,
     trades: net.trades,
     rebalances: net.rebalances,
+    delistings: net.delistings,
+    minCash: net.minCash,
     avgPositions: net.returns.length > 0 ? net.positionsSum / net.returns.length : 0,
     equityCurve: downsample(curve, 400),
     caveats,
@@ -384,6 +433,26 @@ export function compareStrategies(
   const results = strategies
     .map(s => runBacktest(panel, s, partial))
     .filter((r): r is BacktestResult => r !== null)
+  return attachDeflatedSharpe(results, extraTrialSharpes)
+}
+
+/** Igual a compareStrategies, mas cede o event loop entre as estratégias (a API segue respondendo). */
+export async function compareStrategiesAsync(
+  panel: PricePanel,
+  strategies: Strategy[],
+  partial: Partial<BacktestConfig> = {},
+  extraTrialSharpes: number[] = []
+): Promise<BacktestResult[]> {
+  const results: BacktestResult[] = []
+  for (const s of strategies) {
+    const r = runBacktest(panel, s, partial)
+    if (r) results.push(r)
+    await new Promise<void>(resolve => setTimeout(resolve, 0))
+  }
+  return attachDeflatedSharpe(results, extraTrialSharpes)
+}
+
+function attachDeflatedSharpe(results: BacktestResult[], extraTrialSharpes: number[]): BacktestResult[] {
   const trialSharpes = [
     ...results.map(r => periodSharpe(r.series.strategy.map((x, i) => x - (r.series.rfDaily[i] as number)))),
     ...extraTrialSharpes,
@@ -393,6 +462,11 @@ export function compareStrategies(
     r.deflatedSharpe = deflatedSharpe(excess, trialSharpes)
   }
   return results
+}
+
+/** Retornos diários em excesso ao CDI (base de Sharpe, walk-forward e PBO). */
+export function excessSeries(result: BacktestResult): number[] {
+  return result.series.strategy.map((x, i) => x - (result.series.rfDaily[i] as number))
 }
 
 /** Remove séries diárias para serialização na API. */

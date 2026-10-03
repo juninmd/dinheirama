@@ -37,3 +37,9 @@ def temporal_purged_split(timestamps, test_size=0.2, horizon_days=5):
     if not train_idx or not val_idx:
         raise ValueError('Divisao temporal resultou em treino ou validacao vazios.')
     return train_idx, val_idx
+
+
+def missing_classes(labels, expected=(0, 1, 2)):
+    """Classes esperadas que nao aparecem em `labels` (ex.: validacao temporal sem nenhum 'sell')."""
+    present = {int(v) for v in labels}
+    return [c for c in expected if c not in present]

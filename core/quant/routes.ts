@@ -2,9 +2,16 @@
 
 import * as fs from 'fs'
 import * as path from 'path'
-import type { Hono } from 'hono'
+import type { Context, Hono, Next } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
+import { syncCvmFundamentals, type CvmSyncOptions, type CvmSyncResult } from './cvm.ts'
 import type { MarketData } from './data.ts'
-import { FundamentalsHistory, parseFundamentalsCsv } from './fundamentals.ts'
+import {
+  FundamentalsHistory,
+  deserializeFundamentals,
+  parseFundamentalsCsv,
+  serializeFundamentals,
+} from './fundamentals.ts'
 import { type Ips, ipsSchema, deriveConstraints } from './ips.ts'
 import {
   type JournalEntry,
@@ -15,10 +22,20 @@ import {
 } from './journal.ts'
 import type { ConstructionMethod } from './portfolio.ts'
 import type { QuantService } from './service.ts'
-import { SECTOR_BY_TICKER } from './universe.ts'
+import { DEFAULT_DIVIDEND_RULES, DEFAULT_TAX_RULES, computeTaxReport, dividendNet, jcpNet } from './tax.ts'
+import { SECTOR_BY_TICKER, UniverseHistory, parseUniverseHistoryCsv, normalizeTicker } from './universe.ts'
+import { z } from 'zod'
 
 const TICKER_RE = /^[A-Z0-9]{4,6}\.[A-Z]{2}$/
-const METHODS: ConstructionMethod[] = ['hrp', 'erc', 'ivol', 'minvar', 'meanvar']
+const METHODS: ConstructionMethod[] = ['hrp', 'erc', 'ivol', 'minvar', 'meanvar', 'bl']
+
+/** Escrita atômica: grava em arquivo temporário e renomeia (nunca deixa o arquivo pela metade). */
+export function writeFileAtomic(file: string, content: string): void {
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  const tmp = `${file}.${process.pid}.tmp`
+  fs.writeFileSync(tmp, content)
+  fs.renameSync(tmp, file)
+}
 
 export class IpsStore {
   private ips: Ips | null = null
@@ -40,9 +57,7 @@ export class IpsStore {
 
   set(ips: Ips): void {
     this.ips = ips
-    if (!this.file) return
-    fs.mkdirSync(path.dirname(this.file), { recursive: true })
-    fs.writeFileSync(this.file, JSON.stringify(ips, null, 2))
+    if (this.file) writeFileAtomic(this.file, JSON.stringify(ips, null, 2))
   }
 
   clear(): void {
@@ -83,15 +98,41 @@ export function createJournalLookup(data: MarketData, riskFreeAnnual: number): P
   }
 }
 
-/** Carrega o CSV ponto-no-tempo salvo (se existir e for válido). */
-export function loadPitFile(file: string): FundamentalsHistory | null {
+export type PitSource = 'cvm' | 'csv'
+
+/** Carrega os fundamentos PIT salvos: JSON (CVM) tem prioridade sobre o CSV enviado pelo usuário. */
+export function loadPit(dir: string): { history: FundamentalsHistory | null; source: PitSource | null } {
   try {
+    const jsonFile = path.join(dir, 'fundamentals_pit.json')
+    if (fs.existsSync(jsonFile)) {
+      const rows = deserializeFundamentals(fs.readFileSync(jsonFile, 'utf8'))
+      if (rows.length > 0) return { history: new FundamentalsHistory(rows), source: 'cvm' }
+    }
+    const csvFile = path.join(dir, 'fundamentals_pit.csv')
+    if (fs.existsSync(csvFile)) {
+      const { rows } = parseFundamentalsCsv(fs.readFileSync(csvFile, 'utf8'))
+      if (rows.length > 0) return { history: new FundamentalsHistory(rows), source: 'csv' }
+    }
+  } catch {
+    // arquivo ilegível: segue sem PIT (o backtest avisa que valor/qualidade não entram)
+  }
+  return { history: null, source: null }
+}
+
+export function loadUniverseHistory(dir: string): UniverseHistory | null {
+  try {
+    const file = path.join(dir, 'universe_history.csv')
     if (!fs.existsSync(file)) return null
-    const { rows } = parseFundamentalsCsv(fs.readFileSync(file, 'utf8'))
-    return rows.length > 0 ? new FundamentalsHistory(rows) : null
+    const { ranges } = parseUniverseHistoryCsv(fs.readFileSync(file, 'utf8'))
+    return ranges.length > 0 ? new UniverseHistory(ranges) : null
   } catch {
     return null
   }
+}
+
+/** Compatível com a versão anterior: só o histórico (sem a origem). */
+export function loadPitFile(file: string): FundamentalsHistory | null {
+  return loadPit(path.dirname(file)).history
 }
 
 export interface QuantRouteDeps {
@@ -101,8 +142,15 @@ export interface QuantRouteDeps {
   ipsStore: IpsStore
   riskFreeAnnual: number
   dataDir: string
+  /** Tickers do universo (para a sincronização com a CVM). */
+  cvmTickers?: Array<{ ticker: string; isFinancial?: boolean }>
+  /** Injetável para testes (default: download real dos dados abertos da CVM). */
+  cvmSync?: (options: CvmSyncOptions) => Promise<CvmSyncResult>
   /** Hook para o serviço usar fundamentos ponto-no-tempo carregados. */
   onPitChange?: (history: FundamentalsHistory | null) => void
+  onUniverseHistoryChange?: (history: UniverseHistory | null) => void
+  /** Origens extras aceitas em escritas (além de mesma origem). */
+  allowedOrigins?: string[]
   log: (level: 'info' | 'warn' | 'error', message: string, data?: Record<string, unknown>) => void
 }
 
@@ -111,12 +159,63 @@ function num(raw: string | undefined, fallback: number, min: number, max: number
   return Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback
 }
 
+/**
+ * Defesa contra CSRF nas rotas que gravam estado: o CORS do app é aberto (`*`), então um site qualquer poderia
+ * enviar PUT/POST/DELETE com o navegador do usuário. Navegadores informam `Sec-Fetch-Site`; sem ele, comparamos
+ * `Origin` com `Host`. Clientes sem navegador (curl, bot do Telegram) não enviam nenhum dos dois e passam.
+ */
+export function crossSiteWriteGuard(allowedOrigins: string[] = []) {
+  return async (c: Context, next: Next) => {
+    if (['GET', 'HEAD', 'OPTIONS'].includes(c.req.method)) return next()
+    const site = c.req.header('sec-fetch-site')
+    const origin = c.req.header('origin')
+    let blocked = false
+    if (site) {
+      blocked = site !== 'same-origin' && site !== 'none'
+      if (blocked && origin && allowedOrigins.includes(origin)) blocked = false
+    } else if (origin) {
+      let originHost = ''
+      try {
+        originHost = new URL(origin).host
+      } catch {
+        originHost = origin
+      }
+      blocked = originHost !== c.req.header('host') && !allowedOrigins.includes(origin)
+    }
+    if (blocked) return c.json({ error: 'Escritas de outra origem não são permitidas', code: 'CROSS_SITE_BLOCKED' }, 403)
+    return next()
+  }
+}
+
+const tradeSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  ticker: z.string().min(1).max(12),
+  side: z.enum(['buy', 'sell']),
+  qty: z.number().positive(),
+  price: z.number().positive(),
+  fees: z.number().min(0).optional(),
+  kind: z.enum(['acao', 'etf', 'fii']).optional(),
+})
+const taxRequestSchema = z.object({ trades: z.array(tradeSchema).min(1).max(20000) })
+
 export function registerQuantRoutes(app: Hono, deps: QuantRouteDeps): void {
   const { service, journal, ipsStore, log } = deps
   const fail = (c: any, error: any, code: string, status = 500) => {
     log('error', `${code}: ${error?.message ?? error}`)
     return c.json({ error: error?.message ?? String(error), code }, status)
   }
+  const tooLarge = (c: Context) => c.json({ error: 'Payload grande demais', code: 'PAYLOAD_TOO_LARGE' }, 413)
+
+  const guard = crossSiteWriteGuard(deps.allowedOrigins)
+  for (const prefix of ['/api/ips', '/api/journal', '/api/fundamentals', '/api/universe', '/api/tax']) {
+    app.use(prefix, guard)
+    app.use(`${prefix}/*`, guard)
+  }
+  app.use('/api/ips', bodyLimit({ maxSize: 64 * 1024, onError: tooLarge }))
+  app.use('/api/journal', bodyLimit({ maxSize: 64 * 1024, onError: tooLarge }))
+  app.use('/api/fundamentals/*', bodyLimit({ maxSize: 8 * 1024 * 1024, onError: tooLarge }))
+  app.use('/api/universe/*', bodyLimit({ maxSize: 1024 * 1024, onError: tooLarge }))
+  app.use('/api/tax/*', bodyLimit({ maxSize: 4 * 1024 * 1024, onError: tooLarge }))
 
   app.get('/api/factors', async c => {
     try {
@@ -218,26 +317,120 @@ export function registerQuantRoutes(app: Hono, deps: QuantRouteDeps): void {
 
   app.get('/api/journal/calibration', c => c.json(calibrationReport(journal.list())))
 
-  // ---- Fundamentos ponto-no-tempo (CSV do próprio usuário) ----
-  const pitFile = path.join(deps.dataDir, 'fundamentals_pit.csv')
+  // ---- Fundamentos ponto-no-tempo: CSV próprio ou sincronização com a CVM ----
+  const csvFile = path.join(deps.dataDir, 'fundamentals_pit.csv')
+  const jsonFile = path.join(deps.dataDir, 'fundamentals_pit.json')
+  let cvmSyncing = false
 
   app.put('/api/fundamentals/pit', async c => {
     try {
       const text = await c.req.text()
       const { rows, rejected } = parseFundamentalsCsv(text)
-      if (rows.length === 0) return c.json({ error: 'Nenhuma linha válida (exige ticker, asOf e availableAt)', rejected, code: 'PIT_INVALID' }, 400)
-      fs.mkdirSync(deps.dataDir, { recursive: true })
-      fs.writeFileSync(pitFile, text)
+      if (rows.length === 0) return c.json({ error: 'Nenhuma linha válida (exige ticker, asOf e availableAt, com availableAt >= asOf)', rejected, code: 'PIT_INVALID' }, 400)
+      writeFileAtomic(csvFile, text)
+      if (fs.existsSync(jsonFile)) fs.unlinkSync(jsonFile) // uma única fonte ativa: o CSV enviado substitui a da CVM
       deps.onPitChange?.(new FundamentalsHistory(rows))
-      return c.json({ rows: rows.length, rejected, tickers: new Set(rows.map(r => r.ticker)).size })
+      return c.json({ rows: rows.length, rejected, tickers: new Set(rows.map(r => r.ticker)).size, source: 'csv' })
     } catch (error: any) {
       return c.json({ error: error.message, code: 'PIT_INVALID' }, 400)
     }
   })
 
+  app.post('/api/fundamentals/cvm/sync', async c => {
+    if (!deps.cvmTickers) return c.json({ error: 'Universo não configurado para a CVM', code: 'CVM_NOT_CONFIGURED' }, 501)
+    if (cvmSyncing) return c.json({ error: 'Sincronização já em andamento', code: 'CVM_BUSY' }, 409)
+    const body = (await c.req.json().catch(() => ({}))) as { from?: number; to?: number }
+    const thisYear = new Date().getFullYear()
+    const to = Math.min(thisYear, Math.max(2010, Math.round(Number(body.to ?? thisYear))))
+    const from = Math.min(to, Math.max(2010, Math.round(Number(body.from ?? to - 7))))
+    cvmSyncing = true
+    try {
+      const years = Array.from({ length: to - from + 1 }, (_, i) => from + i)
+      const result = await (deps.cvmSync ?? syncCvmFundamentals)({
+        years,
+        tickers: deps.cvmTickers,
+        log: (message, data) => log('info', message, data),
+      })
+      if (result.rows.length === 0) {
+        return c.json({ error: 'Nenhum dado utilizável da CVM (rede indisponível ou formato inesperado)', failedYears: result.failedYears, unmapped: result.unmapped, code: 'CVM_NO_DATA' }, 502)
+      }
+      writeFileAtomic(jsonFile, serializeFundamentals(result.rows))
+      if (fs.existsSync(csvFile)) fs.unlinkSync(csvFile) // a fonte da CVM substitui o CSV anterior
+      deps.onPitChange?.(new FundamentalsHistory(result.rows))
+      return c.json({
+        source: 'cvm',
+        rows: result.rows.length,
+        docs: result.docsUsed,
+        tickers: new Set(result.rows.map(r => r.ticker)).size,
+        years,
+        failedYears: result.failedYears,
+        unmapped: result.unmapped,
+        note: 'Só demonstrações anuais (DFP); formato não validado contra o download real neste ambiente — confira algumas empresas.',
+      })
+    } catch (error) {
+      return fail(c, error, 'CVM_SYNC_ERROR', 502)
+    } finally {
+      cvmSyncing = false
+    }
+  })
+
   app.get('/api/fundamentals/pit', c => {
-    return c.json({ loaded: fs.existsSync(pitFile), file: fs.existsSync(pitFile) ? path.basename(pitFile) : null })
+    const { history, source } = loadPit(deps.dataDir)
+    return c.json({
+      loaded: history !== null,
+      source,
+      rows: history?.rowCount() ?? 0,
+      tickers: history?.tickers().length ?? 0,
+      syncing: cvmSyncing,
+    })
+  })
+
+  // ---- Universo histórico (entradas/saídas) ----
+  const universeFile = path.join(deps.dataDir, 'universe_history.csv')
+
+  app.put('/api/universe/history', async c => {
+    try {
+      const text = await c.req.text()
+      const { ranges, rejected } = parseUniverseHistoryCsv(text)
+      if (ranges.length === 0) return c.json({ error: 'Nenhum intervalo válido (colunas ticker,from,to)', rejected, code: 'UNIVERSE_INVALID' }, 400)
+      writeFileAtomic(universeFile, text)
+      const history = new UniverseHistory(ranges)
+      deps.onUniverseHistoryChange?.(history)
+      return c.json({ ranges: ranges.length, rejected, tickers: history.tickers().map(normalizeTicker) })
+    } catch (error: any) {
+      return c.json({ error: error.message, code: 'UNIVERSE_INVALID' }, 400)
+    }
+  })
+
+  app.get('/api/universe/history', c => {
+    const history = loadUniverseHistory(deps.dataDir)
+    return c.json({ loaded: history !== null, tickers: history?.tickers() ?? [] })
+  })
+
+  app.delete('/api/universe/history', c => {
+    if (fs.existsSync(universeFile)) fs.unlinkSync(universeFile)
+    deps.onUniverseHistoryChange?.(null)
+    return c.json({ success: true })
   })
 
   app.get('/api/universe', c => c.json({ sectors: SECTOR_BY_TICKER }))
+
+  // ---- IR sobre operações reais (calculadora; não é orientação fiscal) ----
+  app.post('/api/tax/report', async c => {
+    const parsed = taxRequestSchema.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) return c.json({ error: 'Operações inválidas', issues: parsed.error.issues.slice(0, 5), code: 'TAX_INVALID' }, 400)
+    const report = computeTaxReport(parsed.data.trades.map(t => ({ ...t, ticker: t.ticker.toUpperCase() })))
+    return c.json({
+      ...report,
+      disclaimer: 'Calculadora educacional baseada em regras simplificadas e configuráveis; confira com a Receita Federal ou um contador.',
+    })
+  })
+
+  app.get('/api/tax/rules', c => c.json({ trading: DEFAULT_TAX_RULES, proventos: DEFAULT_DIVIDEND_RULES }))
+
+  app.get('/api/tax/proventos', c => {
+    const jcp = num(c.req.query('jcp'), 0, 0, 1e12)
+    const dividendos = num(c.req.query('dividendos'), 0, 0, 1e12)
+    return c.json({ jcp: jcpNet(jcp), dividendos: dividendNet(dividendos) })
+  })
 }

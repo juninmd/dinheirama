@@ -232,22 +232,168 @@ export function hierarchicalRiskParity(cov: Matrix): number[] {
   return normalize(weights)
 }
 
+// ---- Black-Litterman -------------------------------------------------------
+
+/** Inversa por Gauss-Jordan com pivoteamento parcial; null se singular. */
+export function invertMatrix(m: Matrix): Matrix | null {
+  const n = m.length
+  const a = m.map((row, i) => [...row, ...Array.from({ length: n }, (_, j) => (i === j ? 1 : 0))])
+  for (let col = 0; col < n; col++) {
+    let pivot = col
+    for (let r = col + 1; r < n; r++) if (Math.abs((a[r] as number[])[col] as number) > Math.abs((a[pivot] as number[])[col] as number)) pivot = r
+    if (Math.abs((a[pivot] as number[])[col] as number) < 1e-14) return null
+    ;[a[col], a[pivot]] = [a[pivot] as number[], a[col] as number[]]
+    const p = (a[col] as number[])[col] as number
+    a[col] = (a[col] as number[]).map(v => v / p)
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue
+      const f = (a[r] as number[])[col] as number
+      if (f === 0) continue
+      a[r] = (a[r] as number[]).map((v, c) => v - f * ((a[col] as number[])[c] as number))
+    }
+  }
+  return a.map(row => row.slice(n))
+}
+
+function matMul(a: Matrix, b: Matrix): Matrix {
+  const n = a.length
+  const k = b.length
+  const m = (b[0] as number[]).length
+  return Array.from({ length: n }, (_, i) =>
+    Array.from({ length: m }, (_, j) => {
+      let s = 0
+      for (let x = 0; x < k; x++) s += ((a[i] as number[])[x] as number) * ((b[x] as number[])[j] as number)
+      return s
+    })
+  )
+}
+
+const transpose = (a: Matrix): Matrix => (a.length === 0 ? [] : (a[0] as number[]).map((_, j) => a.map(row => row[j] as number)))
+
+/** Retornos de equilíbrio implícitos (otimização reversa): π = λ Σ w_mercado. */
+export function impliedEquilibriumReturns(cov: Matrix, marketWeights: number[], riskAversion: number): number[] {
+  return cov.map(row => riskAversion * row.reduce((a, c, j) => a + c * (marketWeights[j] as number), 0))
+}
+
+export interface BlView {
+  /** Linha da matriz P: pesos dos ativos que compõem a visão (ex.: [0,1,0] = visão absoluta no ativo 1). */
+  p: number[]
+  /** Retorno esperado da visão (mesma unidade de π). */
+  q: number
+  /** Confiança de Idzorek (0..1): 1 = certeza (Ω→0), perto de 0 = visão quase ignorada. */
+  confidence: number
+}
+
+export interface BlackLittermanResult {
+  equilibrium: number[]
+  posteriorMean: number[]
+  posteriorCov: Matrix
+}
+
+/**
+ * Posterior de Black-Litterman (He-Litterman): μ = π + τΣP'(PτΣP' + Ω)⁻¹(Q − Pπ);
+ * Σ_post = Σ + τΣ − τΣP'(PτΣP' + Ω)⁻¹PτΣ. Ω_kk = (1/c_k − 1)·p_k τΣ p_k' (Idzorek).
+ */
+export function blackLittermanPosterior(
+  cov: Matrix,
+  marketWeights: number[],
+  views: BlView[],
+  tau = 0.05,
+  riskAversion = 2.5
+): BlackLittermanResult | null {
+  const pi = impliedEquilibriumReturns(cov, marketWeights, riskAversion)
+  if (views.length === 0) return { equilibrium: pi, posteriorMean: pi.slice(), posteriorCov: cov.map(r => r.map(v => v * (1 + tau))) }
+
+  const tauSigma = cov.map(r => r.map(v => v * tau))
+  const P = views.map(v => v.p)
+  const Pt = transpose(P)
+  const PtauSigma = matMul(P, tauSigma) // k × n
+  const PtauSigmaPt = matMul(PtauSigma, Pt) // k × k
+  const omega = views.map((v, k) => {
+    const c = Math.min(0.99, Math.max(0.01, v.confidence))
+    return Array.from({ length: views.length }, (_, j) => (j === k ? (1 / c - 1) * (PtauSigmaPt[k] as number[])[k]! : 0))
+  })
+  const inner = PtauSigmaPt.map((row, i) => row.map((v, j) => v + ((omega[i] as number[])[j] as number)))
+  const innerInv = invertMatrix(inner)
+  if (!innerInv) return null
+
+  const diff = views.map((v, k) => v.q - P[k]!.reduce((a, pj, j) => a + pj * (pi[j] as number), 0))
+  const gain = matMul(matMul(tauSigma, Pt), innerInv) // n × k
+  const posteriorMean = pi.map((p, i) => p + diff.reduce((a, d, k) => a + ((gain[i] as number[])[k] as number) * d, 0))
+
+  const correction = matMul(gain, PtauSigma) // n × n
+  const posteriorCov = cov.map((row, i) => row.map((v, j) => v + ((tauSigma[i] as number[])[j] as number) - ((correction[i] as number[])[j] as number)))
+  return { equilibrium: pi, posteriorMean, posteriorCov }
+}
+
+/**
+ * Visões de fator (regra fundamental de Grinold-Kahn): alfa anual = IC × σ_anual × z.
+ * IC pequeno (default 0,03) mantém as visões modestas; confiança baixa limita o desvio do equilíbrio.
+ */
+export function factorViews(
+  composites: Array<number | null>,
+  dailyVariances: number[],
+  equilibrium: number[],
+  options: { ic?: number; confidence?: number } = {}
+): BlView[] {
+  const ic = options.ic ?? 0.03
+  const confidence = options.confidence ?? 0.25
+  const n = composites.length
+  const views: BlView[] = []
+  composites.forEach((z, i) => {
+    if (z === null || !Number.isFinite(z)) return
+    const sigmaAnnual = Math.sqrt((dailyVariances[i] as number) * 252)
+    const alphaDaily = (ic * sigmaAnnual * z) / 252
+    views.push({ p: Array.from({ length: n }, (_, j) => (j === i ? 1 : 0)), q: (equilibrium[i] as number) + alphaDaily, confidence })
+  })
+  return views
+}
+
 // ---- Restrições e Kelly ----------------------------------------------------
 
-/** Aplica teto por ativo e por setor redistribuindo o excesso para quem tem folga (proporcional). */
-export function applyCaps(
+export interface CapsResult {
+  weights: number[]
+  /** Tetos informados eram inviáveis (não há como somar 100%) e foram relaxados até o mínimo viável. */
+  relaxed: boolean
+  effectiveMaxWeight: number
+  effectiveMaxSector: number
+}
+
+/** Capacidade máxima de alocação (soma 1 exige capacidade >= 1) dados os tetos por ativo e por setor. */
+function capacity(sectors: string[], maxWeight: number, maxSector: number): number {
+  const counts = new Map<string, number>()
+  for (const s of sectors) counts.set(s, (counts.get(s) ?? 0) + 1)
+  let total = 0
+  for (const k of counts.values()) total += Math.min(maxSector, k * maxWeight)
+  return total
+}
+
+/**
+ * Aplica teto por ativo e por setor redistribuindo o excesso para quem tem folga (proporcional).
+ * Se os tetos forem inviáveis (ex.: 29 ativos com teto de 3% somam só 87%), eles são relaxados — proporcionalmente,
+ * até a capacidade chegar a 100% — e o resultado indica `relaxed`, sempre com pesos somando 1.
+ */
+export function applyCapsDetailed(
   weights: number[],
   sectors: string[],
   caps: { maxWeight: number; maxSector: number }
-): number[] {
+): CapsResult {
   const n = weights.length
-  const feasibleAsset = Math.max(caps.maxWeight, 1 / n)
-  const uniqueSectors = new Set(sectors).size
-  const feasibleSector = Math.max(caps.maxSector, 1 / uniqueSectors)
+  let feasibleAsset = Math.max(caps.maxWeight, 1 / n)
+  let feasibleSector = Math.max(caps.maxSector, 1 / new Set(sectors).size)
+  let relaxed = feasibleAsset > caps.maxWeight + 1e-12 || feasibleSector > caps.maxSector + 1e-12
+  // relaxa em passos pequenos até haver capacidade para somar 100%
+  for (let guard = 0; guard < 400 && capacity(sectors, feasibleAsset, feasibleSector) < 1 - 1e-9; guard++) {
+    feasibleAsset *= 1.02
+    feasibleSector *= 1.02
+    relaxed = true
+  }
+  feasibleAsset = Math.min(1, feasibleAsset)
+  feasibleSector = Math.min(1, feasibleSector)
+
   let w = normalize(weights)
-  for (let it = 0; it < 200; it++) {
+  for (let it = 0; it < 300; it++) {
     let changed = false
-    // teto por ativo
     let excess = 0
     w = w.map(x => {
       if (x > feasibleAsset + 1e-12) {
@@ -257,7 +403,6 @@ export function applyCaps(
       }
       return x
     })
-    // teto por setor
     const bySector = new Map<string, number>()
     sectors.forEach((s, i) => bySector.set(s, (bySector.get(s) ?? 0) + (w[i] as number)))
     for (const [sector, total] of bySector) {
@@ -273,7 +418,6 @@ export function applyCaps(
       }
     }
     if (excess > 1e-12) {
-      // redistribui nos ativos com folga (ativo e setor)
       const sectorTotals = new Map<string, number>()
       sectors.forEach((s, i) => sectorTotals.set(s, (sectorTotals.get(s) ?? 0) + (w[i] as number)))
       const slack = w.map((x, i) => Math.max(0, Math.min(feasibleAsset - x, feasibleSector - (sectorTotals.get(sectors[i] as string) ?? 0))))
@@ -284,7 +428,15 @@ export function applyCaps(
     }
     if (!changed) break
   }
-  return w
+  // resíduo numérico: garante soma 1 sem violar os tetos efetivos
+  const total = w.reduce((a, b) => a + b, 0)
+  if (Math.abs(total - 1) > 1e-9) w = w.map(x => x / total)
+  return { weights: w, relaxed, effectiveMaxWeight: feasibleAsset, effectiveMaxSector: feasibleSector }
+}
+
+/** Versão simples de applyCapsDetailed (só os pesos). */
+export function applyCaps(weights: number[], sectors: string[], caps: { maxWeight: number; maxSector: number }): number[] {
+  return applyCapsDetailed(weights, sectors, caps).weights
 }
 
 /** Kelly contínuo f* = (μ − r) / σ², fracionado (¼ por padrão) e limitado. */
@@ -293,7 +445,7 @@ export function fractionalKelly(excessReturn: number, variance: number, fraction
   return Math.max(0, Math.min(cap, fraction * (excessReturn / variance)))
 }
 
-export type ConstructionMethod = 'hrp' | 'erc' | 'ivol' | 'minvar' | 'meanvar'
+export type ConstructionMethod = 'hrp' | 'erc' | 'ivol' | 'minvar' | 'meanvar' | 'bl'
 
 export interface ConstructionInput {
   tickers: string[]
@@ -304,6 +456,12 @@ export interface ConstructionInput {
   maxWeight: number
   maxSector: number
   riskAversion?: number
+  /** Black-Litterman: pesos de mercado (capitalização) e z-scores de fator por ativo. */
+  marketWeights?: number[] | null
+  factorScores?: Array<number | null>
+  blIc?: number
+  blConfidence?: number
+  blTau?: number
 }
 
 export interface ConstructionResult {
@@ -319,6 +477,20 @@ export interface ConstructionResult {
     herfindahl: number
     maxWeight: number
     diversificationRatio: number
+    /** Os tetos pedidos eram inviáveis e foram relaxados (veja os tetos efetivos). */
+    capsRelaxed: boolean
+    effectiveMaxWeight: number
+    effectiveMaxSector: number
+  }
+  blackLitterman?: {
+    tau: number
+    riskAversion: number
+    ic: number
+    confidence: number
+    views: number
+    marketWeightsSource: 'capitalizacao' | 'igual'
+    /** Retorno anualizado de equilíbrio (implícito no mercado) e posterior (com as visões de fator), por ativo. */
+    assets: Array<{ ticker: string; equilibriumAnnual: number; posteriorAnnual: number }>
   }
 }
 
@@ -333,14 +505,41 @@ export function constructPortfolio(input: ConstructionInput): ConstructionResult
   const mu = shrinkMeans(colMeans, variances, returns.length)
 
   let w: number[]
+  let blInfo: ConstructionResult['blackLitterman']
   switch (method) {
     case 'hrp': w = hierarchicalRiskParity(cov); break
     case 'erc': w = equalRiskContribution(cov); break
     case 'ivol': w = inverseVolatility(cov); break
     case 'minvar': w = minimumVariance(cov, input.maxWeight); break
     case 'meanvar': w = meanVarianceShrunk(mu.shrunk, cov, input.riskAversion ?? 6, input.maxWeight); break
+    case 'bl': {
+      const weightsSource = input.marketWeights && input.marketWeights.length === n && input.marketWeights.every(x => x >= 0) && input.marketWeights.some(x => x > 0)
+      const market = weightsSource ? normalize(input.marketWeights as number[]) : Array.from({ length: n }, () => 1 / n)
+      const lambda = input.riskAversion ?? 2.5
+      const tau = input.blTau ?? 0.05
+      const pi = impliedEquilibriumReturns(cov, market, lambda)
+      const views = factorViews(input.factorScores ?? tickers.map(() => null), variances, pi, { ic: input.blIc, confidence: input.blConfidence })
+      const posterior = blackLittermanPosterior(cov, market, views, tau, lambda)
+      if (!posterior) return null
+      w = meanVarianceShrunk(posterior.posteriorMean, posterior.posteriorCov, lambda, input.maxWeight)
+      blInfo = {
+        tau,
+        riskAversion: lambda,
+        ic: input.blIc ?? 0.03,
+        confidence: input.blConfidence ?? 0.25,
+        views: views.length,
+        marketWeightsSource: weightsSource ? 'capitalizacao' : 'igual',
+        assets: tickers.map((ticker, i) => ({
+          ticker,
+          equilibriumAnnual: round((posterior.equilibrium[i] as number) * 252, 4),
+          posteriorAnnual: round((posterior.posteriorMean[i] as number) * 252, 4),
+        })),
+      }
+      break
+    }
   }
-  w = applyCaps(w, input.sectors ?? tickers.map(t => t), { maxWeight: input.maxWeight, maxSector: input.maxSector })
+  const capped = applyCapsDetailed(w, input.sectors ?? tickers.map(t => t), { maxWeight: input.maxWeight, maxSector: input.maxSector })
+  w = capped.weights
 
   const rc = riskContributions(w, cov)
   const variance = portfolioVariance(w, cov)
@@ -363,6 +562,10 @@ export function constructPortfolio(input: ConstructionInput): ConstructionResult
       herfindahl: round(hhi, 4),
       maxWeight: round(Math.max(...w), 4),
       diversificationRatio: round(variance > 0 ? weightedVol / Math.sqrt(variance) : 1, 3),
+      capsRelaxed: capped.relaxed,
+      effectiveMaxWeight: round(capped.effectiveMaxWeight, 4),
+      effectiveMaxSector: round(capped.effectiveMaxSector, 4),
     },
+    ...(blInfo ? { blackLitterman: blInfo } : {}),
   }
 }

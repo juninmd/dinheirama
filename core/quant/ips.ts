@@ -74,7 +74,8 @@ export function deriveConstraints(ips: Ips, worstLoss: number | null = null): Ip
     method: rule.method,
     maxWeight: ips.maxPositionWeight,
     maxSector: ips.maxSectorWeight,
-    maxEquityShare: Math.round(maxEquityShare * 1000) / 1000,
+    // arredonda para BAIXO: arredondar para cima poderia violar a própria tolerância de queda
+    maxEquityShare: Math.floor(maxEquityShare * 1000) / 1000,
     suitability,
     warnings,
     rationale,
@@ -122,7 +123,7 @@ export function checkCompliance(
     {
       id: 'stress',
       label: 'Perda no pior cenário histórico (já considerando a fração em ações) ≤ tolerância',
-      ok: worst === null ? true : worst * equityShare <= ips.maxDrawdownTolerance + 1e-6,
+      ok: worst === null ? true : worst * equityShare <= ips.maxDrawdownTolerance + 1e-4,
       value: worst === null ? null : worst * equityShare,
       limit: ips.maxDrawdownTolerance,
     },
