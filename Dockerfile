@@ -22,7 +22,7 @@ RUN pip install --no-cache-dir \
     scikit-learn==1.6.1 \
     onnx==1.22.0
 
-COPY core/training/trainer.py ./training/trainer.py
+COPY core/training/trainer.py core/training/splits.py ./training/
 
 VOLUME ["/data/training", "/data/models"]
 ENTRYPOINT ["python3", "training/trainer.py"]

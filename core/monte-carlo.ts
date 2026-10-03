@@ -2,6 +2,11 @@
 // Simula caminhos de preço a partir do histórico e ranqueia alocações por
 // distribuição de resultado (retorno, VaR/CVaR, prob. de lucro, Sharpe, Kelly).
 // PRNG com semente fixa: mesma entrada => mesma saída (reprodutível e testável).
+//
+// Cuidado metodológico: o retorno médio amostral é uma estimativa muito ruidosa (Merton, 1980).
+// A otimização de carteira encolhe as médias (James-Stein) para não "premiar" o acaso do passado, e o
+// Kelly sugerido é fracionado (¼) e limitado, pois o Kelly pleno é extremamente sensível a erro de estimação.
+import { fractionalKelly, shrinkMeans } from './quant/portfolio.ts'
 
 export type McEngine = 'bootstrap' | 'gbm'
 
@@ -35,7 +40,10 @@ export interface McAssetResult {
   distribution: McDistribution
   priceTargets: { p5: number; p50: number; p95: number }
   maxDrawdownP50Pct: number
+  /** Kelly pleno (f* = μ/σ²), limitado a [0,1]. Apenas informativo: não use como tamanho de posição. */
   kellyFraction: number
+  /** Kelly fracionado (¼) sobre o retorno em excesso ao CDI, limitado a 20% do patrimônio. */
+  kellySuggested: number
   verdict: 'buy' | 'hold' | 'sell'
   confidence: number
 }
@@ -59,6 +67,8 @@ export interface McPortfolioResult {
   candidates: number
   seed: number
   samples: number
+  /** Intensidade do encolhimento das médias de retorno (0 = sem encolhimento). */
+  driftShrinkage: number
   assets: string[]
   best: {
     sharpe: McCandidate
@@ -244,6 +254,8 @@ export function simulateAsset(
 
   // Kelly contínuo: f* = mu/sigma^2, limitado a [0, 1] para evitar alavancagem sugerida.
   const kelly = sigma > 0 ? Math.max(0, Math.min(1, mu / (sigma * sigma))) : 0
+  const dailyRiskFree = riskFreeRate / TRADING_DAYS_YEAR
+  const kellySuggested = fractionalKelly(mu - dailyRiskFree, sigma * sigma, 0.25, 0.2)
 
   const edge = distribution.probProfit - 0.5
   let verdict: McAssetResult['verdict'] = 'hold'
@@ -273,6 +285,7 @@ export function simulateAsset(
     },
     maxDrawdownP50Pct: Math.round(percentile(sortedDrawdowns, 0.5) * 10000) / 100,
     kellyFraction: Math.round(kelly * 1000) / 1000,
+    kellySuggested: Math.round(kellySuggested * 1000) / 1000,
     verdict,
     confidence: Math.round(Math.min(1, Math.abs(edge) * 2) * 100) / 100,
   }
@@ -360,7 +373,20 @@ function portfolioDrawdownP50(
   return Math.round(percentile(Float64Array.from(drawdowns).sort(), 0.5) * 10000) / 100
 }
 
+/** Desloca cada coluna para a média encolhida (James-Stein), preservando a variância e a correlação. */
+function shrinkMatrixDrift(matrix: number[][]): number {
+  const n = (matrix[0] as number[]).length
+  const t = matrix.length
+  const means = Array.from({ length: n }, (_, i) => mean(matrix.map(row => row[i] as number)))
+  const variances = Array.from({ length: n }, (_, i) => stdDev(matrix.map(row => row[i] as number)) ** 2)
+  const { shrunk, intensity } = shrinkMeans(means, variances, t)
+  for (const row of matrix) for (let i = 0; i < n; i++) row[i] = (row[i] as number) + ((shrunk[i] as number) - (means[i] as number))
+  return intensity
+}
+
 export interface McOptimizeConfig extends McConfig {
+  /** Encolhe as médias históricas antes de simular (recomendado). */
+  shrinkDrift: boolean
   /** Número de vetores de peso avaliados. */
   candidates: number
   /** Peso máximo por ativo (concentração). */
@@ -375,6 +401,7 @@ export const DEFAULT_OPTIMIZE_CONFIG: McOptimizeConfig = {
   candidates: 3000,
   maxWeight: 0.35,
   cvarFloor: -0.25,
+  shrinkDrift: true,
 }
 
 /**
@@ -392,6 +419,7 @@ export function optimizePortfolio(
   if (!built) return null
   const { tickers, matrix } = built
   const n = tickers.length
+  const driftShrinkage = merged.shrinkDrift ? shrinkMatrixDrift(matrix) : 0
   const rand = createRandom(seed)
 
   // Caminhos conjuntos: cada passo sorteia um dia histórico completo.
@@ -475,6 +503,7 @@ export function optimizePortfolio(
     candidates,
     seed,
     samples: matrix.length,
+    driftShrinkage: Math.round(driftShrinkage * 1000) / 1000,
     assets: tickers,
     best: {
       sharpe: toCandidate('sharpe', bySharpe),

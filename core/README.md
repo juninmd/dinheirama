@@ -22,6 +22,18 @@ bun run start
 - `GET /api/research/:ticker` para notícias, fast-news e papers/arXiv com impacto estimado
 - `GET /api/integrations/status` para conferir envs e pendências 24h sem expor segredos
 
+### Camada quantitativa (`quant/`)
+
+- `GET /api/factors` ranking multifator (valor, qualidade, momentum, baixa vol), Graham, Piotroski
+- `GET /api/backtest?years=8&topN=8&costs=1&tax=1` estratégias bruto vs líquido, vs Ibovespa/CDI, Sharpe deflacionado, robustez walk-forward, ressalvas
+- `GET /api/portfolio/construct?method=hrp|erc|ivol|minvar|meanvar&maxWeight=0.15&maxSector=0.35&stress=1` carteira robusta, estresse e aderência ao IPS
+- `GET /api/valuation/:ticker` DCF/DDM com cenários e sensibilidade
+- `GET|PUT|DELETE /api/ips` perfil do investidor (IPS) e restrições derivadas
+- `GET|POST /api/journal`, `DELETE /api/journal/:id`, `POST /api/journal/resolve`, `GET /api/journal/calibration` diário de decisões e calibração (Brier)
+- `GET|PUT /api/fundamentals/pit` fundamentos ponto-no-tempo em CSV (`ticker,asOf,availableAt,...`)
+
+Metodologia, premissas e limitações: [`../docs/METODOLOGIA.md`](../docs/METODOLOGIA.md). Projeto pessoal e educacional; não é recomendação de investimento.
+
 ## Env
 
 - Veja `.env.example`.
@@ -36,6 +48,7 @@ bun run start
 - `NOTIFY_UTC_HOUR`
 - `MC_LOOKBACK_DAYS`
 - `MC_RISK_FREE_RATE`
+- `QUANT_DATA_DIR`, `DCF_RISK_FREE`, `DCF_EQUITY_RISK_PREMIUM`
 
 ## Testes
 

@@ -26,12 +26,12 @@ export function formatMessage(result: Awaited<ReturnType<typeof buildPortfolio>>
   return [
     `<b>📊 Dinheirama — Radar 24h (${date})</b>`,
     '',
-    `<b>Top assimetrias ações + cripto (${result.tickersAnalyzed} ativos analisados):</b>`,
+    `<b>Ranking por fatores — top 5 de ${result.tickersAnalyzed} ativos analisados:</b>`,
     ...lines,
     '',
     escapeHtml(result.recommendation).slice(0, 2500),
     '',
-    `<i>Fonte IA: ${result.aiSource}. Uso educacional; valide notícias, papers e risco antes de operar.</i>`,
+    `<i>Fonte IA: ${result.aiSource}. Projeto pessoal e educacional; não é recomendação de investimento. Valide notícias, papers e risco antes de operar.</i>`,
   ].join('\n')
 }
 
