@@ -1,4 +1,5 @@
 import './style.css'
+import { initResearch, type ResearchHandle } from './research'
 
 interface Toast {
   id: string
@@ -164,6 +165,8 @@ const trainingBtn = $<HTMLButtonElement>('training-btn')
 const montecarloBtn = $<HTMLButtonElement>('montecarlo-btn')
 const researchBtn = $<HTMLButtonElement>('research-btn')
 const alertsBtn = $<HTMLButtonElement>('alerts-btn')
+const quantBtn = $<HTMLButtonElement>('quant-btn')
+const quantResultDiv = $<HTMLElement>('quant-result')
 const portfolioResultDiv = $<HTMLDivElement>('portfolio-result')
 const portfolioStats = $<HTMLDivElement>('portfolio-stats')
 const portfolioAnalysis = $<HTMLParagraphElement>('portfolio-analysis')
@@ -311,7 +314,8 @@ function setupKeyboardShortcuts(): void {
   })
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
+    // Escape dentro da seção de pesquisa não deve esconder formulários em edição
+    if (e.key === 'Escape' && !quantResultDiv.contains(document.activeElement)) {
       hideAllResults()
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
@@ -375,6 +379,7 @@ function setLoading(isLoading: boolean, message = 'Processando...'): void {
     montecarloResultDiv.classList.add('hidden')
     researchResultDiv.classList.add('hidden')
     alertsResultDiv.classList.add('hidden')
+    quantResultDiv.classList.add('hidden')
     errorDiv.classList.add('hidden')
     btn.disabled = true
     generatePortfolioBtn.disabled = true
@@ -382,6 +387,7 @@ function setLoading(isLoading: boolean, message = 'Processando...'): void {
     montecarloBtn.disabled = true
     researchBtn.disabled = true
     alertsBtn.disabled = true
+    quantBtn.disabled = true
   } else {
     btn.disabled = false
     generatePortfolioBtn.disabled = false
@@ -389,6 +395,7 @@ function setLoading(isLoading: boolean, message = 'Processando...'): void {
     montecarloBtn.disabled = false
     researchBtn.disabled = false
     alertsBtn.disabled = false
+    quantBtn.disabled = false
   }
 
   const loadingText = isLoading ? message : 'Processando...'
@@ -408,6 +415,7 @@ function hideAllResults(): void {
   montecarloResultDiv.classList.add('hidden')
   researchResultDiv.classList.add('hidden')
   alertsResultDiv.classList.add('hidden')
+  quantResultDiv.classList.add('hidden')
   errorDiv.classList.add('hidden')
   loading.classList.add('hidden')
 }
@@ -1062,6 +1070,17 @@ alertsBtn.addEventListener('click', () => {
   alertsResultDiv.classList.remove('hidden')
   fetchAlerts()
   fetchHistory()
+})
+
+let research: ResearchHandle | null = null
+
+quantBtn.addEventListener('click', () => {
+  hideAllResults()
+  quantResultDiv.classList.remove('hidden')
+  // monta as sub-abas (e busca dados) só na primeira abertura
+  if (research) research.show()
+  else research = initResearch($<HTMLDivElement>('quant-root'))
+  quantResultDiv.scrollIntoView({ behavior: 'smooth', block: 'start' })
 })
 
 createAlertForm.addEventListener('submit', async (e) => {

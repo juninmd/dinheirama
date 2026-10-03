@@ -1,24 +1,34 @@
 # AGENTS.md
 
+Projeto pessoal e educacional de pesquisa quantitativa para ações da B3. **Nada aqui é recomendação de investimento** — mantenha esse aviso em README, textos de UI, Telegram e respostas de IA.
+
 ## Tech Stack
-- **Architecture:** GitOps + Kubernetes
-- **Deployment:** ArgoCD
-- **Infrastructure:** Kubernetes manifests
-- **CI/CD:** GitHub Actions
+- **Backend:** Bun + Hono + TypeScript (`core/`), dados via Yahoo Finance e BCB
+- **Frontend:** Vite + TypeScript vanilla (`web/`)
+- **Treino (opcional):** Python/XGBoost (`core/training/`)
+- **Deploy:** Docker + ArgoCD (GitOps) em K3s; CI/CD no GitHub Actions
 
 ## Project Structure
 ```
 dinheirama/
-  k8s/              # Kubernetes manifests
-  .github/          # GitHub Actions workflows
-  README.md         # Project documentation
+  core/
+    index.ts            # API Hono, radar, análise, Monte Carlo, alertas
+    quant/              # camada quantitativa (fatores, backtest, carteira, estresse, IPS, diário, guarda do LLM)
+    training/           # coleta de dados e treino (splits.py = divisão temporal com purga)
+  web/                  # frontend
+  docs/METODOLOGIA.md   # metodologia, premissas e limitações
+  .github/              # workflows
 ```
 
 ## Commands
-- ArgoCD auto-syncs from Git
-- `kubectl apply -f k8s/` - Manual apply
+- `cd core && bun install && bun test` — testes (offline, dados sintéticos em `quant/test-helpers.ts`)
+- `cd core && bun run start` — backend em :3000
+- `cd web && bun install && bun run build` — build do frontend
+- `cd core/training && python3 -m unittest test_splits` — testes do split temporal
 
 ## Conventions
-- GitOps workflow with ArgoCD
-- Infrastructure as Code
-- Declarative Kubernetes configuration
+- GitOps com ArgoCD; infraestrutura declarativa.
+- Regras da camada quant: sem look-ahead (sinal em `t`, execução em `t+1`), fundamentos só ponto-no-tempo em backtest, pesos não ajustados ao passado, dado ausente nunca vira zero, resultados sempre com custos/IR e ressalvas.
+- O motor de fatores (`quant/factors.ts`) é compartilhado entre backtest e score ao vivo; não duplique a lógica.
+- Mudanças em estratégias/fatores precisam de teste que prove ausência de look-ahead (veja `quant/backtest.test.ts`).
+- Não versione `.env`; use `.env.example` como contrato.

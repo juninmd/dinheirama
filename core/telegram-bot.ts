@@ -15,7 +15,7 @@ const HELP = [
   '<b>🤖 Dinheirama — assistente de trade 24h</b>',
   '',
   'Comandos:',
-  '• <code>/radar</code> — top assimetrias ações + cripto',
+  '• <code>/radar</code> — ranking por fatores das ações da B3 (educacional)',
   '• <code>/analise PETR4.SA</code> — análise completa de um ativo',
   '• <code>/research BTC-USD</code> — notícias e papers do ativo',
   '• <code>/predict VALE3.SA</code> — sinal do modelo ML',

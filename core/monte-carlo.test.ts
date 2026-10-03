@@ -110,7 +110,7 @@ describe('optimizePortfolio', () => {
     for (const candidate of Object.values(result.best)) {
       const total = candidate.weights.reduce((sum, w) => sum + w.weight, 0)
       expect(total).toBeGreaterThan(0.95)
-      expect(total).toBeLessThanOrEqual(1.001)
+      expect(total).toBeLessThanOrEqual(1.001 + 1e-9) // pesos arredondados a 3 casas
       for (const allocation of candidate.weights) {
         expect(allocation.weight).toBeLessThanOrEqual(0.5 + 1e-9)
         expect(result.assets).toContain(allocation.ticker)
