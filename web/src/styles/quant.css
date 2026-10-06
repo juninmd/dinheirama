@@ -1,0 +1,701 @@
+/* ==========================================================================
+   Pesquisa quantitativa
+   ========================================================================== */
+.quant-root [hidden] {
+  display: none !important;
+}
+
+.quant-root :focus-visible {
+  outline: 2px solid var(--brand-strong);
+  outline-offset: 2px;
+}
+
+.quant-lead {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--text-2);
+  margin-bottom: 1rem;
+}
+
+.quant-hint {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-subtle);
+}
+
+.q-pos { color: var(--q-pos); }
+.q-neg { color: var(--q-neg); }
+.q-warn { color: var(--q-warn); }
+
+/* Abas */
+.quant-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 1rem;
+}
+
+.quant-tab {
+  min-height: 44px;
+  padding: 0.5rem 0.875rem;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-2);
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.quant-tab:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.quant-tab[aria-selected="true"] {
+  color: var(--text);
+  background: var(--surface-2);
+  border-color: var(--line);
+  box-shadow: inset 0 -3px 0 var(--brand-strong);
+}
+
+.quant-panel,
+.quant-out {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.875rem;
+  min-width: 0;
+}
+
+/* sem isso, tabelas largas esticam a página inteira em vez de rolar dentro do contêiner */
+.quant-panel > *,
+.quant-out > * {
+  min-width: 0;
+}
+
+.quant-subtitle {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 0.5rem;
+}
+
+.quant-list {
+  display: grid;
+  gap: 0.25rem;
+  padding-left: 1.1rem;
+  font-size: 0.875rem;
+  color: var(--text);
+}
+
+.quant-hint-list {
+  font-size: 0.8125rem;
+  color: var(--text-subtle);
+}
+
+.quant-sub {
+  display: block;
+  max-width: 300px;
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--text-subtle);
+  white-space: normal;
+}
+
+/* Formulários */
+.quant-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.875rem;
+}
+
+.quant-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0.75rem 1rem;
+}
+
+.quant-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+}
+
+.quant-toolbar .form-group {
+  flex: 1 1 200px;
+}
+
+.quant-toolbar-actions,
+.quant-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.quant-root .form-group label {
+  font-size: 0.8125rem;
+  text-transform: none;
+  color: var(--text);
+}
+
+.quant-root .form-group input:not([type="checkbox"]),
+.quant-root .form-group select,
+.quant-root .form-group textarea {
+  width: 100%;
+  min-height: 40px;
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  font-size: 0.9375rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--q-input-border);
+  border-radius: 6px;
+}
+
+.quant-root .form-group textarea {
+  resize: vertical;
+}
+
+.quant-root .form-group .quant-check-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.quant-root .quant-check-label input {
+  width: 18px;
+  height: 18px;
+  margin-top: 0.15rem;
+  flex: none;
+  accent-color: var(--brand-strong);
+}
+
+.quant-btn {
+  min-height: 40px;
+  justify-content: center;
+}
+
+.quant-btn-secondary {
+  min-height: 40px;
+  padding: 0.5rem 1rem;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--q-accent-text);
+  background: transparent;
+  border: 1px solid var(--q-accent-text);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.quant-btn-secondary:hover:not(:disabled) {
+  background: var(--surface-3);
+}
+
+.quant-btn-secondary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.quant-btn-small {
+  min-height: 32px;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.8125rem;
+}
+
+.quant-status {
+  display: grid;
+  gap: 0.5rem;
+}
+
+/* Estados */
+.quant-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  font-size: 0.9375rem;
+  color: var(--text-2);
+}
+
+.quant-spinner {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border: 3px solid var(--surface-3);
+  border-top-color: var(--brand-strong);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.quant-notice {
+  display: grid;
+  gap: 0.375rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: 8px;
+}
+
+.quant-notice ul {
+  display: grid;
+  gap: 0.25rem;
+  padding-left: 1.1rem;
+}
+
+.quant-notice-title {
+  font-weight: 700;
+}
+
+.quant-notice-warn { background: var(--warn-soft); border-left-color: var(--warn-solid); }
+.quant-notice-bad { background: var(--neg-soft); border-left-color: var(--neg-solid); }
+.quant-notice-ok { background: var(--pos-soft); border-left-color: var(--pos-solid); }
+.quant-notice-info { background: var(--info-soft); border-left-color: var(--info); }
+
+.quant-notice .quant-actions {
+  margin-top: 0.25rem;
+}
+
+.quant-badge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+}
+
+.quant-badge-ok { color: var(--q-pos); background: var(--pos-soft); }
+.quant-badge-bad { color: var(--q-neg); background: var(--neg-soft); }
+.quant-badge-warn { color: var(--q-warn); background: var(--warn-soft); }
+.quant-badge-info { color: var(--q-info); background: var(--info-soft); }
+.quant-badge-neutral { color: var(--text-2); background: var(--surface-3); }
+
+/* Cartões de números */
+.quant-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.625rem;
+}
+
+.quant-stat {
+  display: grid;
+  align-content: start;
+  gap: 0.125rem;
+  min-width: 0;
+  padding: 0.75rem;
+  background: var(--surface-2);
+  border-radius: 10px;
+}
+
+.quant-stat-label {
+  font-size: 0.75rem;
+  color: var(--text-subtle);
+}
+
+.quant-stat-value {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.quant-stat-value.q-pos { color: var(--q-pos); }
+.quant-stat-value.q-neg { color: var(--q-neg); }
+
+.quant-stat-hint {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--text-subtle);
+}
+
+.quant-dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 0.5rem 0.75rem;
+}
+
+.quant-dl-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.375rem 0.625rem;
+  font-size: 0.8125rem;
+  background: var(--surface-2);
+  border-radius: 8px;
+}
+
+.quant-dl-item dt {
+  color: var(--text-subtle);
+}
+
+.quant-dl-item dd {
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tabelas */
+.quant-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.quant-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.quant-table th,
+.quant-table td {
+  padding: 0.5rem 0.625rem;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.quant-table thead th {
+  background: var(--surface-2);
+  color: var(--text-subtle);
+  font-weight: 600;
+}
+
+.quant-table tbody th {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.quant-table .t-left { text-align: left; }
+.quant-table .wrap { white-space: normal; }
+.quant-table thead th[colspan] { text-align: center; }
+.quant-table tbody tr:last-child > * { border-bottom: none; }
+
+.quant-table .sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface);
+  box-shadow: 1px 0 0 var(--line);
+}
+
+.quant-table thead .sticky-col {
+  background: var(--surface-2);
+}
+
+.quant-table .group-gross { border-bottom: 2px solid var(--viz-neutral); }
+.quant-table .group-net { border-bottom: 2px solid var(--viz-1); }
+
+.quant-factors { min-width: 880px; }
+.quant-compare { min-width: 1240px; }
+.quant-weights { min-width: 520px; }
+.quant-journal { min-width: 760px; }
+
+.quant-score-cell {
+  min-width: 96px;
+  text-align: left !important;
+}
+
+.quant-score-num {
+  display: block;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.quant-bar {
+  height: 10px;
+  min-width: 56px;
+  overflow: hidden;
+  background: var(--surface-3);
+  border-radius: 5px;
+}
+
+.quant-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--viz-1);
+  border-radius: 0 4px 4px 0;
+}
+
+.quant-bar-alt > span {
+  background: var(--viz-2);
+}
+
+.quant-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 170px;
+}
+
+.quant-bar-row .quant-bar {
+  flex: 1;
+}
+
+.quant-bar-value {
+  min-width: 3.5rem;
+  text-align: right;
+  font-weight: 600;
+}
+
+.quant-detail-row > td {
+  padding: 0.75rem;
+  white-space: normal;
+  background: var(--surface-2);
+}
+
+.quant-factor-detail {
+  position: sticky;
+  left: 0.5rem;
+  display: grid;
+  gap: 0.75rem;
+  width: min(600px, calc(100vw - 6.5rem));
+  text-align: left;
+  font-variant-numeric: normal;
+}
+
+.quant-two-col {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+.quant-checks {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.375rem;
+  list-style: none;
+  font-size: 0.8125rem;
+  color: var(--text);
+}
+
+.check-ok > strong { color: var(--q-pos); }
+.check-bad > strong { color: var(--q-neg); }
+.check-na > strong { color: var(--text-subtle); }
+
+.quant-valuation {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.quant-valuation:empty {
+  display: none;
+}
+
+.sens-above { color: var(--q-pos); background: var(--pos-soft); }
+.sens-below { color: var(--q-neg); background: var(--neg-soft); }
+.sens-na { color: var(--text-subtle); }
+
+.quant-details > summary {
+  cursor: pointer;
+  padding: 0.25rem 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--q-accent-text);
+}
+
+.quant-details[open] > summary {
+  margin-bottom: 0.5rem;
+}
+
+/* Gráficos */
+.quant-chart {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.quant-chart-plot {
+  position: relative;
+  width: 100%;
+  border-radius: 6px;
+  touch-action: pan-y;
+}
+
+.quant-chart-square {
+  max-width: 420px;
+}
+
+.quant-chart-plot svg {
+  display: block;
+  max-width: 100%;
+}
+
+.quant-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  list-style: none;
+  font-size: 0.8125rem;
+  color: var(--text-2);
+}
+
+.quant-legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.quant-key {
+  display: inline-block;
+  width: 18px;
+  height: 0;
+  flex: none;
+  border-top: 2px solid var(--viz-1);
+}
+
+.quant-key-strategy { border-top-color: var(--viz-1); }
+.quant-key-benchmark { border-top-color: var(--viz-2); }
+.quant-key-cdi,
+.quant-key-perfect { border-top: 2px dashed var(--viz-neutral); }
+
+.quant-key-points {
+  width: 10px;
+  height: 10px;
+  background: var(--viz-1);
+  border: 0;
+  border-radius: 50%;
+}
+
+.q-grid { stroke: var(--viz-grid); stroke-width: 1; }
+.q-axis-text { fill: var(--text-subtle); font-family: inherit; font-size: 11px; }
+.q-line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.q-line-strategy { stroke: var(--viz-1); }
+.q-line-benchmark { stroke: var(--viz-2); }
+.q-line-cdi { stroke: var(--viz-neutral); stroke-dasharray: 5 4; }
+.q-dot { stroke: var(--surface); stroke-width: 2; }
+.q-dot-strategy { fill: var(--viz-1); }
+.q-dot-benchmark { fill: var(--viz-2); }
+.q-dot-cdi { fill: var(--viz-neutral); }
+.q-cross { stroke: var(--text-subtle); stroke-width: 1; }
+.q-hit { fill: transparent; stroke: none; }
+.q-hit:focus-visible { outline: none; stroke: var(--brand-strong); stroke-width: 2; }
+
+.quant-tooltip {
+  position: absolute;
+  z-index: 5;
+  min-width: 150px;
+  padding: 0.5rem 0.625rem;
+  font-size: 0.8125rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--q-input-border);
+  border-radius: 8px;
+  box-shadow: var(--sh-md);
+  pointer-events: none;
+}
+
+.quant-tooltip-date {
+  margin-bottom: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.quant-tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.quant-tooltip-label {
+  color: var(--text-2);
+}
+
+@media (max-width: 600px) {
+  .quant-tab {
+    flex: 1 1 auto;
+    text-align: center;
+  }
+
+  .quant-stats {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  }
+
+  .quant-btn,
+  .quant-btn-secondary {
+    width: 100%;
+  }
+
+  .quant-btn-small {
+    width: auto;
+  }
+}
+
+/* ==========================================================================
+   Redesign: abas em formato segmentado e cartão-raiz
+   ========================================================================== */
+.quant-root {
+  padding: clamp(16px, 2.5vw, 24px);
+}
+
+.quant-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 2px;
+  width: fit-content;
+  max-width: 100%;
+  margin-bottom: 18px;
+  padding: 3px;
+  overflow-x: auto;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  scrollbar-width: none;
+}
+
+.quant-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.quant-tab {
+  flex: none;
+  min-height: 38px;
+  padding: 0 16px;
+  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+}
+
+.quant-tab:hover {
+  background: transparent;
+  color: var(--text);
+}
+
+.quant-tab[aria-selected='true'] {
+  color: var(--text);
+  background: var(--seg-active);
+  border: 0;
+  box-shadow: var(--sh-sm), inset 0 0 0 1px var(--line-strong);
+}
+
+.quant-btn {
+  min-height: 40px;
+}
+
+@media (max-width: 600px) {
+  .quant-tab {
+    flex: none;
+  }
+}

@@ -1,0 +1,338 @@
+/* Primitivas do design system (botões, cartões, campos…), montadas com utilitários do Tailwind via @apply.
+   O layout de cada tela fica em utilitários no próprio markup; aqui entra só o que se repete. */
+@layer components {
+  /* ---- Cartões ---- */
+  .card {
+    @apply min-w-0 rounded-lg border border-line bg-surface p-5 shadow-sm;
+  }
+
+  .card-label {
+    @apply mb-3 text-[0.8125rem] font-semibold text-fg-2;
+  }
+
+  .card-note {
+    @apply mt-3 text-[0.8125rem] leading-normal text-fg-3;
+  }
+
+  /* ---- Botões ---- */
+  .btn,
+  .primary-btn {
+    @apply inline-flex min-h-[42px] items-center justify-center gap-2 rounded-md border border-transparent px-[18px] text-[0.9375rem] leading-none font-semibold whitespace-nowrap no-underline transition duration-150 disabled:opacity-[0.55] enabled:active:translate-y-px;
+  }
+
+  .btn-primary,
+  .primary-btn {
+    @apply bg-brand-strong text-on-brand no-underline enabled:hover:bg-brand-hover enabled:hover:shadow-glow;
+  }
+
+  .btn-secondary {
+    @apply border-line-strong bg-surface-2 text-fg enabled:hover:border-brand-line enabled:hover:bg-surface-3;
+  }
+
+  .btn-ghost {
+    @apply bg-transparent text-fg-2 enabled:hover:bg-surface-2 enabled:hover:text-fg;
+  }
+
+  .btn-danger {
+    @apply bg-neg-solid text-white enabled:hover:brightness-110;
+  }
+
+  .btn-danger-text {
+    @apply enabled:hover:bg-neg-soft enabled:hover:text-neg;
+  }
+
+  .btn-lg {
+    @apply min-h-[54px] rounded-lg px-[26px] text-base;
+  }
+
+  .icon-btn {
+    @apply inline-flex size-10 flex-none items-center justify-center rounded-md border border-line-strong bg-surface-2 text-fg-2 transition-colors enabled:hover:bg-surface-3 enabled:hover:text-fg;
+  }
+
+  .icon-btn-sm {
+    @apply size-8 border-transparent bg-transparent;
+  }
+
+  .icon-btn-danger {
+    @apply enabled:hover:border-transparent enabled:hover:bg-neg-soft enabled:hover:text-neg;
+  }
+
+  .watch-btn.is-active {
+    @apply border-warn/45 bg-warn-soft text-warn;
+  }
+
+  .kbd {
+    @apply inline-flex items-center rounded-md border border-line-strong bg-surface-3 px-[7px] py-0.5 font-mono text-[0.6875rem] font-semibold text-fg-3;
+  }
+
+  /* ---- Campos ---- */
+  .input,
+  .select {
+    @apply min-h-11 w-full rounded-md border border-field bg-surface-2 px-3.5 text-base text-fg transition placeholder:text-fg-3 focus:border-brand focus:ring-[3px] focus:ring-brand-soft focus:outline-none;
+  }
+
+  .select {
+    @apply appearance-none bg-no-repeat pr-[34px];
+    background-position: right 12px center;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238089a0' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  }
+
+  .field {
+    @apply grid min-w-0 content-start gap-1.5;
+  }
+
+  .field label,
+  .field-label {
+    @apply text-[0.8125rem] font-semibold text-fg-2;
+  }
+
+  .field-hint {
+    @apply mt-1.5 min-h-[1.2em] text-[0.8125rem] text-fg-3;
+  }
+
+  .field-hint[role='status']:not(:empty) {
+    @apply text-warn;
+  }
+
+  /* ---- Pílulas, tiles e chips ---- */
+  .pill {
+    @apply inline-flex items-center gap-[5px] rounded-full bg-neutral-soft px-2.5 py-[3px] text-xs leading-snug font-semibold whitespace-nowrap text-fg-2;
+  }
+
+  .pill-pos { @apply bg-pos-soft text-pos; }
+  .pill-neg { @apply bg-neg-soft text-neg; }
+  .pill-warn { @apply bg-warn-soft text-warn; }
+  .pill-info { @apply bg-info-soft text-info; }
+
+  .tile {
+    @apply grid min-w-0 content-start gap-1 rounded-lg border border-line bg-surface px-4 py-3.5;
+  }
+
+  .tile-label {
+    @apply text-xs font-semibold text-fg-3;
+  }
+
+  .tile-value {
+    @apply text-2xl font-bold tracking-[-0.02em] tabular-nums;
+  }
+
+  .tile-hint {
+    @apply text-xs leading-[1.35] text-fg-3;
+  }
+
+  .chip {
+    @apply min-h-8 rounded-full border border-line-strong bg-surface-2 px-3 text-[0.8125rem] font-semibold text-fg-2 transition hover:border-brand-line hover:bg-brand-soft hover:text-brand;
+  }
+
+  /* ---- Controle segmentado ---- */
+  .segmented {
+    @apply inline-flex max-w-full gap-0.5 overflow-x-auto rounded-md border border-line bg-surface-2 p-[3px] [scrollbar-width:none];
+  }
+
+  .segmented::-webkit-scrollbar {
+    display: none;
+  }
+
+  .segmented-btn {
+    @apply inline-flex min-h-9 flex-none items-center gap-2 rounded-[9px] px-3.5 text-sm font-semibold whitespace-nowrap text-fg-2 transition-colors hover:text-fg aria-checked:bg-seg aria-checked:text-fg aria-checked:shadow-sm aria-checked:ring-1 aria-checked:ring-line-strong aria-checked:ring-inset;
+  }
+
+  .segmented-compact .segmented-btn {
+    @apply min-h-[30px] px-[11px] text-[0.8125rem];
+  }
+
+  .segmented-count {
+    @apply rounded-full bg-neutral-soft px-[7px] text-[0.6875rem] leading-[1.6] font-bold text-fg-2;
+  }
+
+  /* ---- Estados: carregando, vazio e erro ---- */
+  .skeleton {
+    @apply block max-w-full animate-shimmer rounded-md bg-[length:200%_100%];
+    background-image: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+  }
+
+  .spinner,
+  .quant-spinner {
+    @apply inline-block size-5 flex-none animate-spin rounded-full border-[3px] border-surface-3 border-t-brand;
+  }
+
+  .spinner-sm {
+    @apply size-4 border-2 border-white/35 border-t-current;
+  }
+
+  .empty,
+  .error-state {
+    @apply grid justify-items-center gap-2 rounded-xl border border-dashed border-line-strong bg-surface px-5 py-11 text-center;
+  }
+
+  .error-state {
+    @apply border-solid border-neg/35;
+  }
+
+  .empty-icon {
+    @apply mb-1.5 inline-flex size-[58px] items-center justify-center rounded-[18px] bg-brand-soft text-brand;
+  }
+
+  .empty-icon-bad {
+    @apply bg-neg-soft text-neg;
+  }
+
+  .empty-title {
+    @apply text-lg font-bold;
+  }
+
+  .empty-text {
+    @apply max-w-[54ch] text-[0.9375rem] text-fg-2;
+  }
+
+  .empty .btn,
+  .error-state .btn {
+    @apply mt-2.5;
+  }
+
+  /* ---- Texto longo (IA) e listas ---- */
+  .prose {
+    @apply text-[0.96875rem] leading-[1.75] text-fg;
+  }
+
+  .prose p + p,
+  .prose p + ul,
+  .prose ul + p {
+    @apply mt-[0.85em];
+  }
+
+  .rich-list {
+    @apply grid list-disc gap-1.5 pl-5;
+  }
+
+  .check-list {
+    @apply grid gap-2.5;
+  }
+
+  .check-list li {
+    @apply flex items-start gap-2.5 text-[0.9375rem] leading-normal;
+  }
+
+  .check-list .icon {
+    @apply mt-0.5 text-brand;
+  }
+
+  /* ---- Tabela ---- */
+  .table-wrap {
+    @apply w-full overflow-x-auto rounded-md border border-line bg-surface;
+  }
+
+  .table {
+    @apply w-full min-w-[920px] text-sm tabular-nums;
+  }
+
+  .table th,
+  .table td {
+    @apply border-b border-line px-3.5 py-[11px] text-right whitespace-nowrap;
+  }
+
+  .table thead th {
+    @apply bg-surface-2 text-xs font-semibold text-fg-3;
+  }
+
+  .table tbody th {
+    @apply font-bold;
+  }
+
+  .table .t-left {
+    @apply text-left;
+  }
+
+  .table tbody tr:hover > * {
+    @apply bg-surface-2;
+  }
+
+  .table tbody tr:last-child > * {
+    @apply border-b-0;
+  }
+
+  /* ---- Switch ---- */
+  .switch {
+    @apply relative h-[26px] w-[46px] flex-none rounded-full border border-field bg-surface-3 p-0 transition-colors aria-checked:border-pos-solid aria-checked:bg-pos-solid;
+  }
+
+  .switch-knob {
+    @apply absolute top-0.5 left-0.5 size-5 rounded-full bg-fg-2 transition duration-200;
+  }
+
+  .switch[aria-checked='true'] .switch-knob {
+    @apply translate-x-5 bg-white;
+  }
+
+  /* ---- Diálogos ---- */
+  .modal {
+    @apply m-auto rounded-xl border border-line-strong bg-surface p-6 text-fg shadow-lg;
+    width: min(440px, calc(100vw - 32px));
+  }
+
+  .sheet {
+    @apply mx-auto mt-auto mb-0 w-full max-w-[520px] rounded-t-3xl border border-b-0 border-line-strong bg-surface px-4 pt-3 pb-[calc(18px+env(safe-area-inset-bottom))] text-fg shadow-lg open:animate-sheet-in;
+  }
+
+  .palette {
+    @apply mx-auto mt-[10dvh] mb-auto overflow-hidden rounded-xl border border-line-strong bg-surface p-0 text-fg shadow-lg open:animate-view-in;
+    width: min(640px, calc(100vw - 24px));
+    max-height: min(560px, 80dvh);
+  }
+
+  .palette-item {
+    @apply flex cursor-pointer items-center gap-3 rounded-md p-2.5;
+  }
+
+  .palette-item.is-active {
+    @apply bg-brand-soft;
+  }
+
+  .palette-item.is-active .palette-icon {
+    @apply text-brand;
+  }
+
+  /* ---- Notificações ---- */
+  .toast {
+    @apply pointer-events-auto flex translate-y-3 items-start gap-2.5 rounded-md border border-l-4 border-line-strong bg-surface-3 py-3 pr-2.5 pl-3.5 text-[0.9rem] leading-[1.4] opacity-0 shadow-lg transition duration-200;
+  }
+
+  .toast.show {
+    @apply translate-y-0 opacity-100;
+  }
+
+  .toast-success { @apply border-l-pos-solid; }
+  .toast-success .toast-icon { @apply text-pos; }
+  .toast-error { @apply border-l-neg-solid; }
+  .toast-error .toast-icon { @apply text-neg; }
+  .toast-warning { @apply border-l-warn-solid; }
+  .toast-warning .toast-icon { @apply text-warn; }
+  .toast-info { @apply border-l-brand-strong; }
+  .toast-info .toast-icon { @apply text-brand; }
+
+  /* ---- Navegação (menu lateral, barra inferior e folha "Mais") ---- */
+  .nav-link {
+    @apply relative flex min-h-[42px] items-center gap-3 rounded-md px-3 text-[0.9375rem] font-medium text-fg-2 no-underline transition-colors hover:bg-surface-2 hover:text-fg aria-[current=page]:bg-brand-soft aria-[current=page]:text-brand max-lg:justify-center max-lg:px-0;
+  }
+
+  .nav-link[aria-current='page']::before {
+    content: '';
+    @apply absolute inset-y-[9px] -left-3.5 w-1 rounded-r bg-brand max-lg:-left-2.5;
+  }
+
+  .tab-link {
+    @apply flex min-h-[54px] flex-col items-center justify-center gap-[3px] rounded-md px-0.5 py-1 text-[0.6875rem] font-semibold text-fg-3 no-underline aria-[current=page]:bg-brand-soft aria-[current=page]:text-brand [&.is-active]:bg-brand-soft [&.is-active]:text-brand;
+  }
+
+  .sheet-item {
+    @apply flex items-center gap-3.5 rounded-md p-2.5 text-fg no-underline hover:bg-surface-2 aria-[current=page]:bg-surface-2;
+  }
+
+  .explore-icon {
+    @apply inline-flex size-[46px] flex-none items-center justify-center rounded-[14px] bg-brand-soft text-brand;
+  }
+
+  .explore-text {
+    @apply grid min-w-0 flex-1 gap-0.5 [&_span]:text-[0.8125rem] [&_span]:leading-[1.4] [&_span]:text-fg-2 [&_strong]:text-base;
+  }
+}

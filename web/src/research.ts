@@ -1,6 +1,7 @@
 // Seção "Pesquisa quantitativa": sub-abas Fatores, Backtest, Carteira robusta, IPS e Diário.
 // Padrão de abas acessíveis (WAI-ARIA tabs): setas, Home/End e carregamento preguiçoso por aba.
 
+import './styles/quant.css'
 import { createBacktestTab } from './research-backtest'
 import { h } from './research-dom'
 import { createFactorsTab } from './research-factors'
@@ -19,11 +20,20 @@ interface TabEntry {
 }
 
 export interface ResearchHandle {
-  /** Chamado quando a seção fica visível: garante que a aba ativa carregue seus dados. */
-  show(): void
+  /** Chamado quando a seção fica visível: garante que a aba ativa carregue seus dados (ou abre a aba pedida). */
+  show(tab?: string): void
 }
 
-export function initResearch(root: HTMLElement): ResearchHandle {
+export interface ResearchOptions {
+  /** Aba aberta na montagem (padrão: fatores). */
+  initial?: string
+  /** Avisa o shell quando a aba muda, para refletir na URL. */
+  onSelect?(id: string): void
+}
+
+export const QUANT_TABS = ['factors', 'backtest', 'portfolio', 'ips', 'journal']
+
+export function initResearch(root: HTMLElement, options: ResearchOptions = {}): ResearchHandle {
   const entries: TabEntry[] = []
   const tablist = h('div', { class: 'quant-tabs', role: 'tablist', 'aria-label': 'Pesquisa quantitativa' })
   const panels = h('div', { class: 'quant-panels' })
@@ -47,6 +57,7 @@ export function initResearch(root: HTMLElement): ResearchHandle {
     }
     next.module.onShow?.()
     if (focus) next.tab.focus()
+    options.onSelect?.(id)
   }
 
   function add(id: string, label: string, module: TabModule): void {
@@ -78,12 +89,17 @@ export function initResearch(root: HTMLElement): ResearchHandle {
   add('journal', 'Diário', createJournalTab())
 
   root.append(tablist, panels)
-  select('factors')
-  // a primeira seleção acima carrega Fatores; show() só repete o onShow da aba ativa (idempotente)
+  select(entries.some(e => e.id === options.initial) ? (options.initial as string) : 'factors')
+  // a primeira seleção acima carrega a aba inicial; show() só repete o onShow da aba ativa (idempotente)
   return {
-    show(): void {
+    show(tab?: string): void {
+      if (tab && tab !== activeId && entries.some(e => e.id === tab)) {
+        select(tab)
+        return
+      }
       const current = entries.find(e => e.id === activeId)
       current?.module.onShow?.()
+      options.onSelect?.(activeId)
     },
   }
 }

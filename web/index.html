@@ -1,305 +1,113 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Assistente 24h de ações da B3 com IA, notícias, papers e gestão de risco" />
-    <meta name="theme-color" content="#242424" />
-    <title>Dinheirama - Assistente 24h de Ações da B3</title>
-    <link rel="stylesheet" href="/src/style.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="Radar 24h de ações da B3 com score quantitativo, IA, notícias, papers e gestão de risco. Projeto pessoal e educacional." />
+    <meta name="theme-color" content="#090b10" />
+    <title>Dinheirama — Radar 24h de ações da B3</title>
+    <script>
+      // aplica o tema antes da primeira pintura (evita o "flash" claro/escuro)
+      try {
+        var saved = localStorage.getItem('darkMode')
+        var light = saved === 'false' || (saved === null && window.matchMedia('(prefers-color-scheme: light)').matches)
+        document.documentElement.setAttribute('data-theme', light ? 'light' : 'dark')
+      } catch (e) {}
+    </script>
   </head>
   <body>
-    <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
+    <svg width="0" height="0" class="absolute" aria-hidden="true" focusable="false">
+      <defs>
+        <linearGradient id="brand-g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#7c8cff" />
+          <stop offset="100%" stop-color="#22d3ee" />
+        </linearGradient>
+      </defs>
+    </svg>
+    <a
+      class="fixed top-2 left-2 z-[200] -translate-y-[160%] rounded-md bg-brand-strong px-4 py-2.5 font-semibold text-on-brand transition-transform focus:translate-y-0"
+      href="#main"
+      >Pular para o conteúdo</a
+    >
+    <div
+      id="toast-container"
+      class="pointer-events-none fixed right-5 bottom-5 z-[300] grid w-[min(380px,calc(100vw_-_32px))] gap-2.5 max-phone:right-3 max-phone:bottom-[calc(82px_+_env(safe-area-inset-bottom))] max-phone:left-3 max-phone:w-auto"
+      aria-live="polite"
+      aria-atomic="false"
+    ></div>
 
-    <div id="network-status" class="hidden network-status">
-      <span>⚠️ Você está offline</span>
-    </div>
-
-    <div class="disclaimer-banner" role="note" aria-label="Aviso legal">
-      <span aria-hidden="true">⚠️</span>
-      <strong>Projeto pessoal e educacional. Não é recomendação de investimento.</strong>
-    </div>
-
-    <div id="app">
-      <header class="app-header">
-        <div class="header-content">
-          <div class="header-title">
-            <h1>📈 Dinheirama</h1>
-            <p class="subtitle">Radar 24h de ações da B3, notícias e papers</p>
-          </div>
-          <button id="dark-mode-toggle" class="icon-btn" aria-label="Alternar modo escuro" title="Alternar tema">
-            <span class="theme-icon">🌙</span>
-          </button>
-        </div>
-      </header>
-
-      <main class="main-content">
-        <div class="card">
-          <form id="analyze-form" class="analyze-form">
-            <div class="input-group">
-              <input
-                type="text"
-                id="ticker-input"
-                placeholder="Ex: PETR4.SA, WEGE3.SA, VALE3.SA"
-                autocomplete="off"
-                autocapitalize="characters"
-                spellcheck="false"
-                aria-label="Código da ação"
-              />
-              <button type="submit" id="analyze-btn" class="primary-btn">
-                <span class="btn-icon">🔍</span>
-                Analisar
-              </button>
-            </div>
-            <p class="input-hint">Pressione Ctrl+K para focar</p>
-          </form>
-
-          <div class="divider">
-            <span>ou</span>
-          </div>
-
-          <button id="generate-portfolio-btn" class="secondary-btn">
-            <span class="btn-icon">🚀</span>
-            Gerar Portfólio B3
-          </button>
-          <button id="training-btn" class="secondary-btn compact-btn">
-            <span class="btn-icon">🎓</span>
-            Treinar Decisão
-          </button>
-          <button id="montecarlo-btn" class="secondary-btn compact-btn">
-            <span class="btn-icon">🎲</span>
-            Monte Carlo
-          </button>
-          <button id="quant-btn" class="secondary-btn compact-btn" aria-controls="quant-result">
-            <span class="btn-icon">🔬</span>
-            Pesquisa Quantitativa
-          </button>
-          <button id="research-btn" class="secondary-btn compact-btn">
-            <span class="btn-icon">📚</span>
-            Pesquisar Papers
-          </button>
-          <button id="alerts-btn" class="secondary-btn compact-btn">
-            <span class="btn-icon">🔔</span>
-            Alertas & Telegram
-          </button>
-        </div>
-
-        <section id="watchlist-container" class="card watchlist hidden">
-          <div class="watchlist-header">
-            <h3>⭐ Minha Watchlist</h3>
-            <span id="watchlist-count" class="watchlist-count">0</span>
-          </div>
-          <ul id="watchlist-list" class="watchlist-list"></ul>
-        </section>
-
-        <div id="loading" class="hidden loading-container">
-          <div class="spinner-container">
-            <div class="spinner"></div>
-            <p class="loading-text">Processando...</p>
-          </div>
-        </div>
-
-        <section id="result" class="card result-card hidden">
-          <div class="result-header">
-            <h2>Resultado: <span id="res-ticker"></span></h2>
-            <div class="result-actions">
-              <span id="res-ai-source" class="ai-badge">🤖 IA</span>
-              <button id="add-to-watchlist-btn" class="icon-btn small" title="Adicionar à watchlist">
-                <span>⭐</span>
-              </button>
-            </div>
-          </div>
-
-          <div class="result-grid">
-            <div class="stat-card">
-              <span class="stat-label">Preço</span>
-              <span id="res-price" class="stat-value">-</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label">Variação</span>
-              <span id="res-change" class="stat-value">-</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label">RSI (14)</span>
-              <span id="res-rsi" class="stat-value">-</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label">Score</span>
-              <span id="res-score" class="stat-value">-</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label">Ação</span>
-              <span id="res-action" class="stat-value">-</span>
-            </div>
-          </div>
-
-          <div class="analysis-box">
-            <h3>📊 Decisão da IA</h3>
-            <p id="res-analysis" class="analysis-text"></p>
-          </div>
-          <div class="analysis-box signal-box">
-            <h3>📰 Sinais externos</h3>
-            <ul id="res-signals" class="signal-list"></ul>
-          </div>
-        </section>
-
-        <section id="portfolio-result" class="card portfolio-card hidden">
-          <div class="result-header">
-            <h2>🎯 Radar Recomendado</h2>
-          </div>
-
-          <div id="portfolio-stats" class="portfolio-grid"></div>
-
-          <div class="analysis-box">
-            <h3>📈 Estratégia do Assistente</h3>
-            <p id="portfolio-analysis" class="analysis-text"></p>
-          </div>
-        </section>
-
-        <section id="montecarlo-result" class="card portfolio-card hidden">
-          <div class="result-header">
-            <h2>🎲 Monte Carlo — Carteira Ótima</h2>
-            <span id="mc-meta" class="ai-badge"></span>
-          </div>
-
-          <div id="mc-candidates" class="portfolio-grid"></div>
-
-          <div class="analysis-box">
-            <h3>📊 Distribuição simulada por ativo</h3>
-            <div id="mc-assets" class="portfolio-grid"></div>
-          </div>
-        </section>
-
-        <section id="training-result" class="card portfolio-card hidden">
-          <div class="result-header">
-            <h2>Treino de Mercado</h2>
-          </div>
-          <div id="training-list" class="training-list"></div>
-        </section>
-
-        <section id="research-result" class="card portfolio-card hidden">
-          <div class="result-header">
-            <h2>Pesquisa de Impacto</h2>
-          </div>
-          <p id="research-summary" class="analysis-text"></p>
-          <div id="research-list" class="research-list"></div>
-        </section>
-
-        <section id="quant-result" class="card portfolio-card quant-card hidden" aria-labelledby="quant-title">
-          <div class="result-header">
-            <h2 id="quant-title">🔬 Pesquisa Quantitativa</h2>
-          </div>
-          <p class="quant-lead">
-            Fatores, backtest, carteira robusta, IPS e diário de decisões. Ferramentas para estudar e testar ideias,
-            sempre com as limitações à vista.
+    <div class="grid min-h-dvh grid-cols-[264px_minmax(0,1fr)] max-lg:grid-cols-[76px_minmax(0,1fr)] max-phone:block">
+      <aside
+        class="sticky top-0 z-20 flex h-dvh flex-col gap-2 overflow-y-auto border-r border-line bg-elev px-3.5 py-[18px] max-lg:px-2.5 max-lg:py-4 max-phone:hidden"
+        aria-label="Menu lateral"
+      >
+        <a class="flex items-center gap-3 px-2 pt-1 pb-4 text-fg no-underline max-lg:justify-center max-lg:px-0" href="#/" aria-label="Dinheirama — início">
+          <svg class="flex-none drop-shadow-[0_6px_14px_rgb(79_94_232/0.45)]" viewBox="0 0 32 32" width="34" height="34" aria-hidden="true">
+            <rect width="32" height="32" rx="9" fill="url(#brand-g)" />
+            <path d="M7 21.5 13 15l4.2 3.8L25 10" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M19.5 10H25v5.5" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span class="grid leading-[1.15] max-lg:hidden"
+            ><strong class="text-lg font-bold tracking-[-0.02em]">Dinheirama</strong><small class="text-xs text-fg-3">Radar 24h · B3</small></span
+          >
+        </a>
+        <nav id="side-nav" class="grid gap-0.5" aria-label="Principal"></nav>
+        <div class="mt-auto px-2 pt-3 max-lg:hidden">
+          <p class="rounded-md border border-line bg-surface-2 p-3 text-xs leading-normal text-fg-3">
+            Projeto pessoal e educacional.<br />Não é recomendação de investimento.
           </p>
-          <div id="quant-root"></div>
-        </section>
-
-        <section id="alerts-result" class="card portfolio-card hidden">
-          <div class="result-header">
-            <h2>🔔 Central de Alertas & Telegram</h2>
-          </div>
-
-          <div class="alerts-manager-grid">
-            <div class="alert-form-box">
-              <h3 class="alerts-subtitle">Criar Novo Alerta</h3>
-              <form id="create-alert-form" class="alert-form">
-                <div class="form-row">
-                  <div class="form-group flex-1">
-                    <label for="alert-ticker">Ativo</label>
-                    <input type="text" id="alert-ticker" placeholder="Ex: PETR4.SA, VALE3.SA" required />
-                  </div>
-                  <div class="form-group flex-1">
-                    <label for="alert-type">Tipo de Sinal</label>
-                    <select id="alert-type">
-                      <option value="price">Preço</option>
-                      <option value="rsi">RSI (14)</option>
-                      <option value="ml_signal">Sinal de ML (Action)</option>
-                    </select>
-                  </div>
-                </div>
-                
-                <div class="form-row">
-                  <div class="form-group flex-1">
-                    <label for="alert-condition">Condição</label>
-                    <select id="alert-condition">
-                      <option value="above">Acima de (&gt;)</option>
-                      <option value="below">Abaixo de (&lt;)</option>
-                      <option value="action_equals" class="hidden-cond">Igual a (=)</option>
-                    </select>
-                  </div>
-                  <div class="form-group flex-1">
-                    <label for="alert-value">Valor / Ação</label>
-                    <input type="text" id="alert-value" placeholder="Ex: 75000, 30" required />
-                  </div>
-                </div>
-                
-                <button type="submit" class="primary-btn full-width mt-1">
-                  <span>➕</span> Criar Alerta
-                </button>
-              </form>
-            </div>
-
-            <div class="telegram-config-box">
-              <h3 class="alerts-subtitle">Integração Telegram</h3>
-              <p class="config-desc">
-                Os alertas disparados enviam notificações em tempo real para o chat configurado em seu <code>.env</code> (usando <code>TELEGRAM_BOT_TOKEN</code> e <code>TELEGRAM_CHAT_ID</code>).
-              </p>
-              <button id="test-telegram-btn" class="secondary-btn full-width">
-                <span>⚡</span> Testar Conexão do Bot
-              </button>
-            </div>
-          </div>
-
-          <div class="divider mt-2 mb-2"></div>
-
-          <div class="alerts-lists-section">
-            <div class="alerts-list-container">
-              <h3 class="alerts-subtitle">Alertas Ativos</h3>
-              <div class="table-container">
-                <table class="alerts-table">
-                  <thead>
-                    <tr>
-                      <th>Ativo</th>
-                      <th>Tipo</th>
-                      <th>Gatilho</th>
-                      <th>Status</th>
-                      <th>Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody id="active-alerts-list">
-                    <tr>
-                      <td colspan="5" class="empty-list-msg text-center">Carregando alertas...</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div class="alerts-history-container mt-2">
-              <div class="history-header">
-                <h3 class="alerts-subtitle">Histórico de Disparos</h3>
-                <button id="clear-alert-history-btn" class="danger-btn compact-btn hidden">Limpar</button>
-              </div>
-              <ul id="alerts-history-list" class="history-list">
-                <li class="empty-list-msg">Carregando histórico...</li>
-              </ul>
-            </div>
-          </div>
-        </section>
-
-        <div id="error" class="card error-card hidden" role="alert">
-          <span class="error-icon">⚠️</span>
-          <span id="error-message" class="error-message"></span>
         </div>
-      </main>
+      </aside>
 
-      <footer class="app-footer">
-        <p class="footer-disclaimer"><strong>Projeto pessoal e educacional. Não é recomendação de investimento.</strong></p>
-        <p>Dados: Yahoo Finance • IA: Ollama • fast-news/papers via env • Uso educacional</p>
-      </footer>
+      <div class="flex min-h-dvh min-w-0 flex-col">
+        <header
+          class="sticky top-0 z-[15] flex h-16 items-center gap-3 border-b border-line bg-bg/80 px-gutter backdrop-blur-md backdrop-saturate-150 max-phone:h-[58px] max-phone:px-3.5"
+        >
+          <a class="hidden flex-none max-phone:inline-flex" href="#/" aria-label="Dinheirama — início">
+            <svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true">
+              <rect width="32" height="32" rx="9" fill="url(#brand-g)" />
+              <path d="M7 21.5 13 15l4.2 3.8L25 10" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
+              <path d="M19.5 10H25v5.5" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </a>
+          <button
+            id="open-palette"
+            class="flex h-[42px] max-w-[560px] min-w-0 flex-1 items-center gap-2.5 rounded-md border border-line-strong bg-surface-2 pr-2.5 pl-3.5 text-left text-fg-3 transition hover:border-brand-line hover:text-fg-2"
+            type="button"
+            aria-haspopup="dialog"
+          >
+            <span id="search-trigger-icon" class="inline-flex"></span>
+            <span class="min-w-0 flex-1 truncate text-[0.9375rem]">Buscar ação ou ferramenta…</span>
+            <kbd id="search-kbd" class="kbd max-phone:hidden">Ctrl K</kbd>
+          </button>
+          <div class="ml-auto flex items-center gap-2">
+            <span id="net-status" class="inline-flex items-center gap-1.5 rounded-full bg-neg-soft px-2.5 py-1 text-xs font-bold text-neg" role="status" hidden></span>
+            <button id="theme-toggle" class="icon-btn" type="button"></button>
+          </div>
+        </header>
+
+        <div class="flex items-center justify-center gap-2 border-b border-line bg-warn-soft px-gutter py-[7px] text-center text-[0.8125rem] leading-[1.4] text-disclaimer" role="note" aria-label="Aviso legal">
+          <span id="disclaimer-icon" class="inline-flex"></span>
+          <p><strong>Projeto pessoal e educacional. Não é recomendação de investimento.</strong></p>
+        </div>
+
+        <main id="main" class="mx-auto w-full max-w-[1280px] flex-1 px-gutter pt-7 pb-14 outline-none max-phone:pt-5 max-phone:pb-[calc(96px_+_env(safe-area-inset-bottom))]" tabindex="-1">
+          <noscript><p class="p-6 text-center">Este app precisa de JavaScript para funcionar.</p></noscript>
+          <div id="views"></div>
+        </main>
+
+        <footer class="border-t border-line px-gutter pt-6 pb-8 text-center text-[0.8125rem] leading-relaxed text-fg-3 max-phone:pb-[calc(88px_+_env(safe-area-inset-bottom))]">
+          <p class="text-fg-2"><strong>Projeto pessoal e educacional. Não é recomendação de investimento.</strong></p>
+          <p>Dados: Yahoo Finance e BCB • IA: Ollama • fast-news/papers via env • Uso educacional</p>
+        </footer>
+      </div>
+
+      <nav
+        id="tab-bar"
+        class="fixed inset-x-0 bottom-0 z-30 hidden grid-cols-5 border-t border-line bg-elev/90 px-1.5 pt-1.5 pb-[calc(6px_+_env(safe-area-inset-bottom))] backdrop-blur-lg backdrop-saturate-150 max-phone:grid"
+        aria-label="Navegação rápida"
+      ></nav>
     </div>
 
     <script type="module" src="/src/main.ts"></script>

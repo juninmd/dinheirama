@@ -1,0 +1,6 @@
+/* Ponto de entrada do CSS: Tailwind v4 + tema + camadas próprias. */
+@import 'tailwindcss';
+@import './theme.css';
+@import './base.css';
+@import './components.css';
+@import './visuals.css';

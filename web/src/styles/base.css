@@ -1,0 +1,68 @@
+/* Ajustes sobre o preflight do Tailwind. */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-padding-top: 80px;
+  }
+
+  body {
+    @apply min-h-dvh bg-bg font-sans leading-[1.55] text-fg antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  *,
+  ::before,
+  ::after {
+    border-color: var(--line);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply leading-tight tracking-[-0.015em] text-balance;
+  }
+
+  p,
+  li {
+    text-wrap: pretty;
+  }
+
+  a {
+    @apply text-brand underline-offset-[3px];
+  }
+
+  button {
+    @apply cursor-pointer disabled:cursor-not-allowed;
+  }
+
+  code {
+    @apply rounded-md bg-surface-3 px-[0.4em] py-[0.1em] font-mono text-[0.85em];
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  ::selection {
+    background: var(--brand-soft);
+  }
+
+  dialog::backdrop {
+    background: rgb(4 6 10 / 0.62);
+    backdrop-filter: blur(4px);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
