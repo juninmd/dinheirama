@@ -290,3 +290,48 @@ describe('rotas quantitativas', () => {
     expect(body.caveats.join(' ')).not.toContain('NÃO entram')
   })
 })
+
+describe('createYahooMarketData: downloads compartilhados', () => {
+  const day = (offsetDays: number) => new Date(Date.now() - offsetDays * 864e5)
+  const bars = Array.from({ length: 400 }, (_, i) => ({ date: day(399 - i), close: 10 + i, adjclose: 10 + i, volume: 1 }))
+
+  test('pedidos simultâneos e períodos menores reaproveitam o mesmo download', async () => {
+    let calls = 0
+    const yahoo = {
+      chart: async () => {
+        calls++
+        await Bun.sleep(5)
+        return { quotes: bars }
+      },
+      quoteSummary: async () => ({}),
+    }
+    const md = createYahooMarketData(yahoo)
+    const [a, b] = await Promise.all([md.priceSeries('A.SA', 2), md.priceSeries('A.SA', 2)])
+    expect(calls).toBe(1)
+    expect(a).toBe(b)
+    const short = await md.priceSeries('A.SA', 1)
+    expect(calls).toBe(1)
+    expect(short!.dates.length).toBeLessThan(a!.dates.length)
+    expect(short!.dates.length).toBeGreaterThan(300)
+    expect(short!.dates[0]! >= new Date(Date.now() - 366 * 864e5).toISOString().slice(0, 10)).toBe(true)
+    await md.priceSeries('A.SA', 5) // período maior que o em cache exige novo download
+    expect(calls).toBe(2)
+  })
+
+  test('falha é lembrada por pouco tempo e depois tenta de novo', async () => {
+    let calls = 0
+    const yahoo = {
+      chart: async () => { calls++; throw new Error('429') },
+      quoteSummary: async () => { calls++; throw new Error('429') },
+    }
+    const md = createYahooMarketData(yahoo, { failureTtlMs: 30 })
+    expect(await md.priceSeries('X.SA', 1)).toBeNull()
+    expect(await md.priceSeries('X.SA', 1)).toBeNull()
+    expect(await md.fundamentals('X.SA')).toBeNull()
+    expect(await md.fundamentals('X.SA')).toBeNull()
+    expect(calls).toBe(2)
+    await Bun.sleep(40)
+    expect(await md.priceSeries('X.SA', 1)).toBeNull()
+    expect(calls).toBe(3)
+  })
+})
