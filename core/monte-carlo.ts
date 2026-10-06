@@ -422,6 +422,7 @@ function normalizeWeights(raw: number[], maxWeight: number): number[] {
   return weights
 }
 
+/** `terminalByAsset` é ativo-major (índice i * sims + s): cada ativo escolhido é lido de forma contígua. */
 function portfolioTerminalReturns(
   terminalByAsset: Float64Array,
   sims: number,
@@ -429,18 +430,14 @@ function portfolioTerminalReturns(
   weights: number[],
   out: Float64Array = new Float64Array(sims)
 ): Float64Array {
-  // Carteiras são esparsas: pesos zero não alteram a soma, então só percorremos os ativos escolhidos.
-  const active: number[] = []
-  for (let i = 0; i < n; i++) if ((weights[i] as number) !== 0) active.push(i)
-  const m = active.length
-  for (let s = 0; s < sims; s++) {
-    let acc = 0
-    const base = s * n
-    for (let k = 0; k < m; k++) {
-      const i = active[k] as number
-      acc += (weights[i] as number) * (terminalByAsset[base + i] as number)
-    }
-    out[s] = acc
+  out.fill(0)
+  // Carteiras são esparsas: pesos zero não alteram a soma, então só percorremos os ativos escolhidos
+  // (em ordem crescente de índice, a mesma ordem de soma de antes => resultado idêntico bit a bit).
+  for (let i = 0; i < n; i++) {
+    const weight = weights[i] as number
+    if (weight === 0) continue
+    const offset = i * sims
+    for (let s = 0; s < sims; s++) out[s] = (out[s] as number) + weight * (terminalByAsset[offset + s] as number)
   }
   return out
 }
@@ -536,7 +533,7 @@ export function optimizePortfolio(
     pathIndexes[i] = Math.floor(rand() * matrix.length)
   }
 
-  // Retorno simples terminal de cada ativo em cada simulação.
+  // Retorno simples terminal de cada ativo em cada simulação (ativo-major).
   const terminalByAsset = new Float64Array(sims * n)
   for (let s = 0; s < sims; s++) {
     const cumulative = new Float64Array(n)
@@ -544,7 +541,7 @@ export function optimizePortfolio(
       const row = matrix[pathIndexes[s * days + d] as number] as number[]
       for (let i = 0; i < n; i++) cumulative[i] = (cumulative[i] as number) + (row[i] as number)
     }
-    for (let i = 0; i < n; i++) terminalByAsset[s * n + i] = Math.expm1(cumulative[i] as number)
+    for (let i = 0; i < n; i++) terminalByAsset[i * sims + s] = Math.expm1(cumulative[i] as number)
   }
 
   const returnsBuffer = new Float64Array(sims)

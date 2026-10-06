@@ -33,6 +33,10 @@ import { type FactorTableRow, createQuantService } from './quant/service.ts'
 
 const app = new Hono()
 
+// JSON da API é verboso e muito compressível (backtest/fatores passam de 100 kB); estáticos já saem pré-comprimidos.
+// Fica antes de registerQuantRoutes: no Hono, middleware só cobre rotas registradas depois dele.
+app.use('/api/*', compress())
+
 const tickerSchema = z.string().regex(/^[A-Z0-9]{4,6}\.[A-Z]{2}$/, 'Invalid B3 ticker format (ex: PETR4.SA)')
 
 const quoteCache = new CacheManager(5)
@@ -45,6 +49,7 @@ const liveQuoteCache = new CacheManager(0.5, 200)
 const barsCache = new CacheManager(15, 200)
 const snapshotCache = new CacheManager(0.5, 200)
 const portfolioCache = new CacheManager(2, 4)
+const analysisCache = new CacheManager(3, 100)
 
 type AssetClass = 'stock'
 type SuggestedAction = 'buy' | 'hold' | 'sell'
@@ -231,9 +236,6 @@ async function fetchWithRetry<T>(
 }
 
 app.use('*', cors())
-// JSON da API é verboso e muito compressível; estáticos já saem pré-comprimidos (precompressed).
-app.use('/api/*', compress())
-
 const isApiPath = (path: string) => path === '/health' || path.startsWith('/api/')
 
 // Assets do Vite têm hash no nome: cache imutável. O resto (index.html etc.) revalida sempre.
@@ -345,89 +347,94 @@ app.post('/api/analyze', async (c) => {
       thesis: body.thesis || 'Ativo solicitado pelo usuario',
     }
 
-    const snapshot = await buildAssetSnapshot(asset)
-    if (!snapshot) {
+    // LLM + Monte Carlo são caros: análises do mesmo ativo em sequência (ou simultâneas) compartilham uma execução
+    const { value: analysis } = await analysisCache.getOrLoad(`analysis:${ticker}:${asset.name}`, async () => {
+      const snapshot = await buildAssetSnapshot(asset)
+      if (!snapshot) return null
+
+      const series = await fetchCloseSeries(ticker)
+      const monteCarlo = series ? simulateAsset(series, { days: 21, sims: 5000 }) : null
+
+      const facts: FactLine[] = [
+        { label: 'Ativo', display: `${snapshot.ticker} (${snapshot.name})` },
+        { label: 'Preço', display: `R$ ${snapshot.price.toFixed(2)}`, numbers: [snapshot.price] },
+        { label: 'Score (posto 0-100 no universo)', display: `${snapshot.score} (modelo ${snapshot.scoreModel ?? 'legacy'})`, numbers: [snapshot.score] },
+        { label: 'Sinal educacional', display: snapshot.action },
+        { label: 'Risco por volatilidade', display: snapshot.risk },
+        ...snapshot.rationale.map(line => ({ label: 'Leitura', display: line })),
+        { label: 'Notícias/papers (não entram no score)', display: `${snapshot.newsImpact.label}: ${snapshot.newsImpact.summary}` },
+        ...(monteCarlo ? [{ label: 'Monte Carlo', display: formatMcAsset(monteCarlo) }] : [{ label: 'Monte Carlo', display: 'histórico insuficiente' }]),
+      ]
+
+      const fallbackText = [
+        `**Sinal do modelo (ranking relativo, não previsão):** ${snapshot.action.toUpperCase()} — score ${snapshot.score}/100, risco ${snapshot.risk}.`,
+        '',
+        `**Leitura:** ${snapshot.rationale.join(' ')}`,
+        '',
+        `**Notícias/papers (informativo):** ${snapshot.newsImpact.summary}.`,
+        '',
+        monteCarlo
+          ? `**Monte Carlo (${monteCarlo.days}d):** retorno médio ${monteCarlo.distribution.meanPct}%, prob. de lucro ${(monteCarlo.distribution.probProfit * 100).toFixed(0)}%, P5 ${monteCarlo.distribution.percentiles.p5}%, P95 ${monteCarlo.distribution.percentiles.p95}%, CVaR95 ${monteCarlo.distribution.cvar95Pct}%. A média histórica é uma estimativa ruidosa: use o intervalo, não o ponto.`
+          : '**Monte Carlo:** histórico insuficiente para simular.',
+        '',
+        '**O que não sabemos:** resultados futuros, notícias não capturadas e sua situação pessoal (horizonte, reserva, tolerância a perdas).',
+      ].join('\n')
+
+      const guarded = await guardedExplain(
+        { generate: prompt => fetchWithTimeout(llm.generate(prompt), 300000) },
+        `Análise educacional de ${snapshot.ticker}`,
+        facts,
+        fallbackText
+      )
+      const aiResponse = guarded.text
+      const aiSource = guarded.source === 'llm' ? 'litellm' : 'fallback'
+      if (guarded.rejected) log('warn', 'LLM answer rejected by guard', { ticker, unsupported: guarded.rejected.unsupportedNumbers, forbidden: guarded.rejected.forbidden })
+
+      log('info', `Analysis complete for ${ticker}`, { rsi: snapshot.rsi, score: snapshot.score, action: snapshot.action, aiSource })
+
+      const mlFeatures: FeatureVector = {
+        rsi: snapshot.rsi,
+        historyChange30d: snapshot.historyChange,
+        dayChange: snapshot.change,
+        volumeRatio: null,
+        priceToSma20: null,
+        priceToSma50: null,
+        atr: null,
+        newsImpactScore: snapshot.newsImpact.score,
+        signalCount: snapshot.signals.length,
+        marketCap: null,
+        peRatio: null,
+        dividendYield: null,
+      }
+      const mlPrediction = predict(mlFeatures)
+
+      return {
+        ticker,
+        name: snapshot.name,
+        assetClass: snapshot.assetClass,
+        quote: {
+          price: snapshot.price,
+          change: snapshot.change,
+          volume: snapshot.volume,
+        },
+        rsi: snapshot.rsi,
+        score: snapshot.score,
+        action: snapshot.action,
+        risk: snapshot.risk,
+        newsImpact: snapshot.newsImpact,
+        signals: snapshot.signals,
+        rationale: snapshot.rationale,
+        analysis: aiResponse,
+        aiSource,
+        mlPrediction,
+        monteCarlo,
+        timestamp: new Date().toISOString()
+      }
+    })
+    if (!analysis) {
       return c.json({ error: 'Asset not found', code: 'NOT_FOUND' }, 404)
     }
-
-    const series = await fetchCloseSeries(ticker)
-    const monteCarlo = series ? simulateAsset(series, { days: 21, sims: 5000 }) : null
-
-    const facts: FactLine[] = [
-      { label: 'Ativo', display: `${snapshot.ticker} (${snapshot.name})` },
-      { label: 'Preço', display: `R$ ${snapshot.price.toFixed(2)}`, numbers: [snapshot.price] },
-      { label: 'Score (posto 0-100 no universo)', display: `${snapshot.score} (modelo ${snapshot.scoreModel ?? 'legacy'})`, numbers: [snapshot.score] },
-      { label: 'Sinal educacional', display: snapshot.action },
-      { label: 'Risco por volatilidade', display: snapshot.risk },
-      ...snapshot.rationale.map(line => ({ label: 'Leitura', display: line })),
-      { label: 'Notícias/papers (não entram no score)', display: `${snapshot.newsImpact.label}: ${snapshot.newsImpact.summary}` },
-      ...(monteCarlo ? [{ label: 'Monte Carlo', display: formatMcAsset(monteCarlo) }] : [{ label: 'Monte Carlo', display: 'histórico insuficiente' }]),
-    ]
-
-    const fallbackText = [
-      `**Sinal do modelo (ranking relativo, não previsão):** ${snapshot.action.toUpperCase()} — score ${snapshot.score}/100, risco ${snapshot.risk}.`,
-      '',
-      `**Leitura:** ${snapshot.rationale.join(' ')}`,
-      '',
-      `**Notícias/papers (informativo):** ${snapshot.newsImpact.summary}.`,
-      '',
-      monteCarlo
-        ? `**Monte Carlo (${monteCarlo.days}d):** retorno médio ${monteCarlo.distribution.meanPct}%, prob. de lucro ${(monteCarlo.distribution.probProfit * 100).toFixed(0)}%, P5 ${monteCarlo.distribution.percentiles.p5}%, P95 ${monteCarlo.distribution.percentiles.p95}%, CVaR95 ${monteCarlo.distribution.cvar95Pct}%. A média histórica é uma estimativa ruidosa: use o intervalo, não o ponto.`
-        : '**Monte Carlo:** histórico insuficiente para simular.',
-      '',
-      '**O que não sabemos:** resultados futuros, notícias não capturadas e sua situação pessoal (horizonte, reserva, tolerância a perdas).',
-    ].join('\n')
-
-    const guarded = await guardedExplain(
-      { generate: prompt => fetchWithTimeout(llm.generate(prompt), 300000) },
-      `Análise educacional de ${snapshot.ticker}`,
-      facts,
-      fallbackText
-    )
-    const aiResponse = guarded.text
-    const aiSource = guarded.source === 'llm' ? 'litellm' : 'fallback'
-    if (guarded.rejected) log('warn', 'LLM answer rejected by guard', { ticker, unsupported: guarded.rejected.unsupportedNumbers, forbidden: guarded.rejected.forbidden })
-
-    log('info', `Analysis complete for ${ticker}`, { rsi: snapshot.rsi, score: snapshot.score, action: snapshot.action, aiSource })
-
-    const mlFeatures: FeatureVector = {
-      rsi: snapshot.rsi,
-      historyChange30d: snapshot.historyChange,
-      dayChange: snapshot.change,
-      volumeRatio: null,
-      priceToSma20: null,
-      priceToSma50: null,
-      atr: null,
-      newsImpactScore: snapshot.newsImpact.score,
-      signalCount: snapshot.signals.length,
-      marketCap: null,
-      peRatio: null,
-      dividendYield: null,
-    }
-    const mlPrediction = predict(mlFeatures)
-
-    return c.json({
-      ticker,
-      name: snapshot.name,
-      assetClass: snapshot.assetClass,
-      quote: {
-        price: snapshot.price,
-        change: snapshot.change,
-        volume: snapshot.volume,
-      },
-      rsi: snapshot.rsi,
-      score: snapshot.score,
-      action: snapshot.action,
-      risk: snapshot.risk,
-      newsImpact: snapshot.newsImpact,
-      signals: snapshot.signals,
-      rationale: snapshot.rationale,
-      analysis: aiResponse,
-      aiSource,
-      mlPrediction,
-      monteCarlo,
-      timestamp: new Date().toISOString()
-    })
+    return c.json(analysis)
 
   } catch (error: any) {
     log('error', 'Analysis failed', { error: error.message })
