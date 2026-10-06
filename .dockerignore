@@ -1,0 +1,16 @@
+.git
+.github
+**/node_modules
+**/.env
+**/.env.*
+!**/.env.example
+data
+core/public
+web/dist
+**/*.log
+**/*.test.ts
+core/quant/test-helpers.ts
+core/training/__pycache__
+core/training/test_*.py
+docs
+*.md
