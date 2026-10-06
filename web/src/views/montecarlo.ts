@@ -3,8 +3,8 @@ import { hrefAnalyze, type Route, type View } from '../router'
 import type { McCandidate, MonteCarloResponse } from '../types'
 import { api } from '../ui/api'
 import { type FrontierMark, frontierChart, percentileBand } from '../ui/charts'
-import { emptyState, errorState, loadingPanel, pill, sectionTitle, segmented, setBusy, skeleton, statTile, viewHeader } from '../ui/components'
-import { ACTION_LABEL, actionTone, fmtBrl, fmtNum, fmtPct, fmtPrice, fmtSignedPoints, relTime, shortTicker, signTone } from '../ui/format'
+import { DISCLAIMER_INLINE, GRID_2, GRID_TILES, GRID_TILES_3, OUT, PARAM_GRID, STACK, emptyState, errorState, loadingPanel, pill, sectionTitle, segmented, setBusy, skeleton, statTile, viewHeader } from '../ui/components'
+import { ACTION_LABEL, TEXT_TONE, actionTone, fmtBrl, fmtNum, fmtPct, fmtPrice, fmtSignedPoints, relTime, shortTicker, signTone } from '../ui/format'
 import { icon } from '../ui/icons'
 import { toast } from '../ui/toast'
 
@@ -30,7 +30,7 @@ const ENGINES = [
 ]
 
 export function createMonteCarloView(): View {
-  const el = h('div', { class: 'view-stack' })
+  const el = h('div', { class: STACK })
 
   const horizon = h('select', { class: 'select', id: 'mc-days' }, ...HORIZONS.map(o => h('option', { value: o.value, selected: o.value === '21' }, o.label)))
   const engine = h('select', { class: 'select', id: 'mc-engine' }, ...ENGINES.map(o => h('option', { value: o.value }, o.label)))
@@ -42,11 +42,11 @@ export function createMonteCarloView(): View {
   const runBtn = h('button', { type: 'submit', class: 'btn btn-primary' }, icon('dice', 18), 'Simular')
   const form = h(
     'form',
-    { class: 'card param-form' },
-    h('div', { class: 'param-grid' }, h('div', { class: 'field' }, h('label', { for: 'mc-days' }, 'Horizonte'), horizon), h('div', { class: 'field' }, h('label', { for: 'mc-engine' }, 'Motor'), engine, engineHint), h('div', { class: 'field' }, h('label', { for: 'mc-sims' }, 'Precisão'), sims)),
-    h('div', { class: 'param-actions' }, runBtn)
+    { class: 'card grid gap-4' },
+    h('div', { class: PARAM_GRID }, h('div', { class: 'field' }, h('label', { for: 'mc-days' }, 'Horizonte'), horizon), h('div', { class: 'field' }, h('label', { for: 'mc-engine' }, 'Motor'), engine, engineHint), h('div', { class: 'field' }, h('label', { for: 'mc-sims' }, 'Precisão'), sims)),
+    h('div', { class: 'flex justify-end' }, runBtn)
   )
-  const out = h('div', { class: 'mc-out' })
+  const out = h('div', { class: OUT })
 
   el.append(
     viewHeader({ title: 'Simulação Monte Carlo', subtitle: 'Milhares de cenários para estimar a faixa de resultados de cada ação e de carteiras sorteadas. É um modelo — não uma previsão.' }),
@@ -72,7 +72,7 @@ export function createMonteCarloView(): View {
     if (busy) return
     busy = true
     setBusy(runBtn, true, 'Simulando…')
-    out.replaceChildren(loadingPanel('Simulando milhares de cenários…', h('div', { class: 'grid-tiles' }, skeleton(84), skeleton(84), skeleton(84), skeleton(84)), skeleton(260)))
+    out.replaceChildren(loadingPanel('Simulando milhares de cenários…', h('div', { class: GRID_TILES }, skeleton(84), skeleton(84), skeleton(84), skeleton(84)), skeleton(260)))
     const query = new URLSearchParams({ days: horizon.value, sims: sims.value, engine: engine.value })
     try {
       data = await api<MonteCarloResponse>(`/api/portfolio/montecarlo?${query}`, {}, { timeoutMs: 180_000 })
@@ -98,18 +98,18 @@ export function createMonteCarloView(): View {
       h('p', { class: 'card-note' }, meta.blurb),
       h(
         'div',
-        { class: 'mc-detail' },
+        { class: 'grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-x-8 gap-y-5' },
         h(
           'div',
-          { class: 'mc-alloc' },
+          null,
           h('h3', { class: 'card-label' }, 'Alocação sugerida pelo sorteio'),
           weights.length === 0
-            ? h('p', { class: 'muted' }, 'Sem alocação.')
-            : h('ul', { class: 'alloc-list' }, ...weights.map(w => h('li', null, h('a', { href: hrefAnalyze(w.ticker), class: 'alloc-ticker' }, shortTicker(w.ticker)), h('span', { class: 'alloc-bar', 'aria-hidden': 'true' }, (() => { const f = h('span'); f.style.width = `${(w.weight / max) * 100}%`; return f })()), h('span', { class: 'alloc-pct' }, fmtPct(w.weight, 1)))))
+            ? h('p', { class: 'text-fg-2' }, 'Sem alocação.')
+            : h('ul', { class: 'grid gap-2.5' }, ...weights.map(w => h('li', { class: 'grid grid-cols-[64px_1fr_56px] items-center gap-3' }, h('a', { href: hrefAnalyze(w.ticker), class: 'font-bold no-underline' }, shortTicker(w.ticker)), h('span', { class: 'h-2.5 overflow-hidden rounded-full bg-surface-3', 'aria-hidden': 'true' }, (() => { const f = h('span', { class: 'block h-full rounded-full bg-gradient-to-r from-brand-strong to-cyan' }); f.style.width = `${(w.weight / max) * 100}%`; return f })()), h('span', { class: 'text-right font-bold tabular-nums' }, fmtPct(w.weight, 1)))))
         ),
         h(
           'div',
-          { class: 'mc-dist' },
+          null,
           h('h3', { class: 'card-label' }, `Faixa de resultados em ${data.days} pregões`),
           percentileBand(d.percentiles, d.meanPct),
           h('p', { class: 'card-note' }, 'Barra escura: 50% dos cenários (P25–P75). Barra clara: 90% (P5–P95). Traço: mediana.')
@@ -117,7 +117,7 @@ export function createMonteCarloView(): View {
       ),
       h(
         'div',
-        { class: 'grid-tiles grid-tiles-3' },
+        { class: GRID_TILES_3 },
         statTile('Retorno médio', fmtSignedPoints(d.meanPct, 2), 'média dos cenários', { tone: signTone(d.meanPct) }),
         statTile('Prob. de lucro', fmtPct(d.probProfit, 0), `ganho >10%: ${fmtPct(d.probGain10, 0)} · perda >10%: ${fmtPct(d.probLoss10, 0)}`),
         statTile('CVaR 95%', fmtSignedPoints(d.cvar95Pct, 2), 'perda média nos 5% piores', { tone: 'neg', title: 'Valor condicional em risco: média das perdas nos 5% piores cenários.' }),
@@ -142,7 +142,7 @@ export function createMonteCarloView(): View {
         renderCandidate()
       },
     })
-    detailHost = h('div', { class: 'mc-candidate' })
+    detailHost = h('div', { class: 'mt-3.5 grid gap-[18px]' })
 
     const portfolios = h('section', { class: 'card' }, sectionTitle('Carteiras candidatas', pill('neutral', `${res.candidates.toLocaleString('pt-BR')} sorteadas`)), picker.el, detailHost)
 
@@ -155,7 +155,7 @@ export function createMonteCarloView(): View {
         null,
         h('th', { scope: 'row', class: 't-left' }, h('a', { href: hrefAnalyze(a.ticker) }, shortTicker(a.ticker))),
         h('td', null, fmtPrice(a.lastPrice)),
-        h('td', { class: `tone-${signTone(d.meanPct)}` }, fmtSignedPoints(d.meanPct, 1)),
+        h('td', { class: TEXT_TONE[signTone(d.meanPct)] }, fmtSignedPoints(d.meanPct, 1)),
         h('td', null, fmtPrice(a.priceTargets.p5)),
         h('td', null, fmtPrice(a.priceTargets.p50)),
         h('td', null, fmtPrice(a.priceTargets.p95)),
@@ -176,9 +176,9 @@ export function createMonteCarloView(): View {
     )
 
     out.replaceChildren(
-      h('p', { class: 'meta-line' }, icon('clock', 14), `${res.sims.toLocaleString('pt-BR')} simulações × ${res.candidates.toLocaleString('pt-BR')} carteiras · ${res.days} pregões · motor ${res.engine === 'gbm' ? 'browniano' : 'bootstrap'} · ${res.assets.length} ativos · gerado ${relTime(res.generatedAt)}`),
+      h('p', { class: 'flex flex-wrap items-center gap-1.5 text-[0.8125rem] text-fg-3' }, icon('clock', 14), `${res.sims.toLocaleString('pt-BR')} simulações × ${res.candidates.toLocaleString('pt-BR')} carteiras · ${res.days} pregões · motor ${res.engine === 'gbm' ? 'browniano' : 'bootstrap'} · ${res.assets.length} ativos · gerado ${relTime(res.generatedAt)}`),
       portfolios,
-      h('div', { class: 'grid-2' }, frontier, h('section', { class: 'card ai-card' }, sectionTitle('Como ler'), h('ul', { class: 'check-list' }, ...['P5/P95: em 90% dos cenários o resultado fica entre esses valores.', 'VaR/CVaR medem a perda nos 5% piores cenários — o risco de cauda.', 'Sharpe compara retorno e risco; maior costuma ser melhor, mas depende do período.', `Preço de referência: ${fmtBrl(res.perAsset[0]?.lastPrice)} (${shortTicker(res.perAsset[0]?.ticker ?? '')}) e demais últimos fechamentos.`].map(t => h('li', null, icon('info', 16), h('span', null, t)))), h('p', { class: 'disclaimer-inline' }, icon('alert', 14), 'Simulações dependem do histórico e de premissas; resultados passados não garantem o futuro.'))),
+      h('div', { class: GRID_2 }, frontier, h('section', { class: 'card' }, sectionTitle('Como ler'), h('ul', { class: 'check-list' }, ...['P5/P95: em 90% dos cenários o resultado fica entre esses valores.', 'VaR/CVaR medem a perda nos 5% piores cenários — o risco de cauda.', 'Sharpe compara retorno e risco; maior costuma ser melhor, mas depende do período.', `Preço de referência: ${fmtBrl(res.perAsset[0]?.lastPrice)} (${shortTicker(res.perAsset[0]?.ticker ?? '')}) e demais últimos fechamentos.`].map(t => h('li', null, icon('info', 16), h('span', null, t)))), h('p', { class: DISCLAIMER_INLINE }, icon('alert', 14), 'Simulações dependem do histórico e de premissas; resultados passados não garantem o futuro.'))),
       assets
     )
     renderCandidate()

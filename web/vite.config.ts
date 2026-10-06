@@ -1,6 +1,7 @@
 import { brotliCompressSync, constants, gzipSync } from 'node:zlib'
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import tailwindcss from '@tailwindcss/vite'
 import { defineConfig, type Plugin } from 'vite'
 
 /** Gera .br e .gz ao lado de cada asset de texto: o backend (serveStatic precompressed) serve sem comprimir em runtime. */
@@ -32,7 +33,7 @@ function precompress(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [precompress()],
+  plugins: [tailwindcss(), precompress()],
   build: {
     target: 'es2022',
     sourcemap: false,

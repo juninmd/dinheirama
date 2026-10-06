@@ -601,7 +601,7 @@
   background: var(--surface);
   border: 1px solid var(--q-input-border);
   border-radius: 8px;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--sh-md);
   pointer-events: none;
 }
 
@@ -660,7 +660,7 @@
   overflow-x: auto;
   background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: var(--r-md);
+  border-radius: 12px;
   scrollbar-width: none;
 }
 
@@ -687,7 +687,7 @@
   color: var(--text);
   background: var(--seg-active);
   border: 0;
-  box-shadow: var(--shadow-sm), inset 0 0 0 1px var(--line-strong);
+  box-shadow: var(--sh-sm), inset 0 0 0 1px var(--line-strong);
 }
 
 .quant-btn {

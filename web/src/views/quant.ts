@@ -1,6 +1,6 @@
 import { h } from '../research-dom'
 import { pathFor, type Route, type View } from '../router'
-import { errorState, loadingPanel, skeleton, viewHeader } from '../ui/components'
+import { STACK, errorState, loadingPanel, skeleton, viewHeader } from '../ui/components'
 import { icon } from '../ui/icons'
 import type { ResearchHandle } from '../research'
 
@@ -15,11 +15,11 @@ export function preloadQuant(): Promise<typeof import('../research')> {
 }
 
 export function createQuantView(): View {
-  const el = h('div', { class: 'view-stack' })
+  const el = h('div', { class: STACK })
   const root = h('div', { class: 'quant-root card' })
   el.append(
     viewHeader({ title: 'Pesquisa quantitativa', subtitle: 'Fatores, backtest, carteira robusta, IPS e diário de decisões. Ferramentas para estudar e testar ideias, sempre com as limitações à vista.' }),
-    h('div', { class: 'callout' }, icon('info', 18), h('p', null, 'Resultados de backtest são históricos e carregam vieses (sobrevivência, dados e custos). Eles ajudam a estudar uma ideia — não a prometer retorno.')),
+    h('div', { class: 'flex items-start gap-3 rounded-md border border-line bg-info-soft px-4 py-3 text-sm leading-normal text-fg-2 [&_.icon]:mt-0.5 [&_.icon]:text-info' }, icon('info', 18), h('p', null, 'Resultados de backtest são históricos e carregam vieses (sobrevivência, dados e custos). Eles ajudam a estudar uma ideia — não a prometer retorno.')),
     root
   )
 

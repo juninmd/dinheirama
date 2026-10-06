@@ -3,27 +3,31 @@ import { hrefAlert, hrefAnalyze, navigate, pathFor, type Route, type View } from
 import { recents } from '../store'
 import type { ResearchItem, ResearchResponse, Sentiment } from '../types'
 import { api } from '../ui/api'
-import { chipRow, emptyState, errorState, linkOut, loadingPanel, pill, sectionTitle, segmented, setBusy, skeleton, tickerInput, viewHeader } from '../ui/components'
-import { POPULAR, SENTIMENT_LABEL, fmtDate, isValidTicker, relTime, sentimentTone, shortTicker, toTicker } from '../ui/format'
+import { CHIPS, OUT, SEARCH_BAR, STACK, TOOLBAR, chipRow, emptyState, errorState, linkOut, loadingPanel, pill, sectionTitle, segmented, setBusy, skeleton, tickerInput, viewHeader } from '../ui/components'
+import { POPULAR, SENTIMENT_LABEL, type Tone, fmtDate, isValidTicker, relTime, sentimentTone, shortTicker, toTicker } from '../ui/format'
 import { icon } from '../ui/icons'
 
 type KindFilter = 'all' | ResearchItem['kind']
 type SentimentFilter = 'all' | Sentiment
 
+// bordas por sentimento (classes completas para o Tailwind)
+const NEWS_EDGE: Record<Sentiment, string> = { bullish: 'border-l-pos-solid', bearish: 'border-l-neg-solid', neutral: 'border-l-line-strong' }
+const IMPACT_EDGE: Record<Tone, string> = { pos: 'border-l-pos-solid', neg: 'border-l-neg-solid', warn: 'border-l-warn-solid', info: 'border-l-info', neutral: 'border-l-line-strong' }
+
 const KIND_LABEL: Record<ResearchItem['kind'], string> = { 'fast-news': 'Fast news', news: 'Notícia', paper: 'Paper' }
 
 export function createNewsView(): View {
-  const el = h('div', { class: 'view-stack' })
-  const input = tickerInput({ id: 'news-ticker', label: 'Código da ação', placeholder: 'Ex.: PETR4' })
+  const el = h('div', { class: STACK })
+  const input = tickerInput({ id: 'news-ticker', label: 'Código da ação', placeholder: 'Ex.: PETR4', grow: true })
   const submit = h('button', { type: 'submit', class: 'btn btn-primary' }, icon('search', 18), 'Pesquisar')
   const hint = h('p', { class: 'field-hint', role: 'status' })
-  const form = h('form', { class: 'search-bar', novalidate: true }, input, submit)
-  const shortcuts = h('div', { class: 'shortcuts' })
-  const out = h('div', { class: 'news-out' })
+  const form = h('form', { class: SEARCH_BAR, novalidate: true }, input, submit)
+  const shortcuts = h('div', { class: CHIPS })
+  const out = h('div', { class: OUT })
 
   el.append(
     viewHeader({ title: 'Notícias & papers', subtitle: 'O que está saindo sobre o ativo — notícias de mercado, fast news e artigos científicos — com o impacto estimado de cada item.' }),
-    h('div', { class: 'card search-card' }, form, hint, shortcuts),
+    h('div', { class: 'card p-4' }, form, hint, shortcuts),
     out
   )
 
@@ -87,17 +91,17 @@ export function createNewsView(): View {
     const date = item.publishedAt ? fmtDate(item.publishedAt) : null
     return h(
       'article',
-      { class: `news-item news-${item.impact}` },
-      h('div', { class: 'news-meta' }, pill('neutral', KIND_LABEL[item.kind] ?? item.kind), h('span', { class: 'news-source' }, item.source), date && date !== '—' ? h('span', { class: 'muted' }, date) : null, h('span', { class: 'news-impact' }, pill(sentimentTone(item.impact), SENTIMENT_LABEL[item.impact] ?? item.impact, { icon: item.impact === 'bullish' ? 'up' : item.impact === 'bearish' ? 'down' : undefined }))),
-      h('h3', { class: 'news-title' }, item.url ? linkOut(item.url, item.title) : item.title),
-      item.summary ? h('p', { class: 'news-summary' }, item.summary) : null
+      { class: `grid gap-2 rounded-lg border border-l-4 border-line bg-surface px-[18px] py-4 ${NEWS_EDGE[item.impact]}` },
+      h('div', { class: 'flex flex-wrap items-center gap-x-3 gap-y-2 text-[0.8125rem]' }, pill('neutral', KIND_LABEL[item.kind] ?? item.kind), h('span', { class: 'font-semibold text-fg-2' }, item.source), date && date !== '—' ? h('span', { class: 'text-fg-2' }, date) : null, h('span', { class: 'ml-auto' }, pill(sentimentTone(item.impact), SENTIMENT_LABEL[item.impact] ?? item.impact, { icon: item.impact === 'bullish' ? 'up' : item.impact === 'bearish' ? 'down' : undefined }))),
+      h('h3', { class: 'text-[1.0625rem] leading-[1.35] font-bold' }, item.url ? linkOut(item.url, item.title, 'text-fg no-underline hover:text-brand hover:underline') : item.title),
+      item.summary ? h('p', { class: 'line-clamp-3 text-[0.9rem] leading-[1.55] text-fg-2' }, item.summary) : null
     )
   }
 
   function renderList(): void {
     if (!data || !listHost) return
     const rows = data.items.filter(i => (kind === 'all' || i.kind === kind) && (sentiment === 'all' || i.impact === sentiment))
-    listHost.replaceChildren(...(rows.length > 0 ? rows.map(itemCard) : [h('p', { class: 'muted' }, 'Nenhum item neste filtro.')]))
+    listHost.replaceChildren(...(rows.length > 0 ? rows.map(itemCard) : [h('p', { class: 'text-fg-2' }, 'Nenhum item neste filtro.')]))
   }
 
   function render(): void {
@@ -108,10 +112,10 @@ export function createNewsView(): View {
 
     const summary = h(
       'section',
-      { class: `card impact-card impact-${impactTone}` },
-      h('div', { class: 'impact-head' }, h('div', null, h('h2', { class: 'asset-ticker' }, shortTicker(current), h('span', { class: 'asset-suffix' }, '.SA')), h('p', { class: 'muted' }, `Atualizado ${relTime(res.generatedAt)}`)), pill(impactTone, `Impacto ${SENTIMENT_LABEL[res.impact.label].toLowerCase()}`, { icon: res.impact.label === 'bullish' ? 'up' : res.impact.label === 'bearish' ? 'down' : 'activity' })),
-      h('p', { class: 'impact-summary' }, res.impact.summary || 'Sem resumo disponível.'),
-      h('div', { class: 'impact-actions' }, h('a', { class: 'btn btn-secondary', href: hrefAnalyze(current) }, icon('search', 18), 'Analisar ativo'), h('a', { class: 'btn btn-secondary', href: hrefAlert(current) }, icon('bell', 18), 'Criar alerta'))
+      { class: `card grid gap-3.5 border-l-4 ${IMPACT_EDGE[impactTone]}` },
+      h('div', { class: 'flex flex-wrap items-start justify-between gap-3' }, h('div', null, h('h2', { class: 'flex items-baseline gap-0.5 text-[clamp(1.75rem,1.3rem+2vw,2.5rem)] font-extrabold tracking-[-0.035em]' }, shortTicker(current), h('span', { class: 'text-[0.45em] font-semibold text-fg-3' }, '.SA')), h('p', { class: 'text-fg-2' }, `Atualizado ${relTime(res.generatedAt)}`)), pill(impactTone, `Impacto ${SENTIMENT_LABEL[res.impact.label].toLowerCase()}`, { icon: res.impact.label === 'bullish' ? 'up' : res.impact.label === 'bearish' ? 'down' : 'activity' })),
+      h('p', { class: 'max-w-[78ch] text-base leading-[1.6]' }, res.impact.summary || 'Sem resumo disponível.'),
+      h('div', { class: 'flex flex-wrap gap-2.5' }, h('a', { class: 'btn btn-secondary', href: hrefAnalyze(current) }, icon('search', 18), 'Analisar ativo'), h('a', { class: 'btn btn-secondary', href: hrefAlert(current) }, icon('bell', 18), 'Criar alerta'))
     )
 
     if (res.items.length === 0) {
@@ -138,13 +142,13 @@ export function createNewsView(): View {
       },
       options: [{ value: 'all', label: 'Todos' }, { value: 'bullish', label: 'Positivo' }, { value: 'neutral', label: 'Neutro' }, { value: 'bearish', label: 'Negativo' }],
     })
-    listHost = h('div', { class: 'news-list' })
+    listHost = h('div', { class: 'grid gap-3' })
 
     const questions = res.nextQuestions?.length
       ? h('section', { class: 'card' }, sectionTitle('Perguntas para aprofundar'), h('ul', { class: 'check-list' }, ...res.nextQuestions.map(q => h('li', null, icon('sparkles', 16), h('span', null, q)))))
       : null
 
-    out.replaceChildren(summary, h('div', { class: 'toolbar' }, kinds.el, sentiments.el), listHost, ...(questions ? [questions] : []))
+    out.replaceChildren(summary, h('div', { class: TOOLBAR }, kinds.el, sentiments.el), listHost, ...(questions ? [questions] : []))
     renderList()
   }
 

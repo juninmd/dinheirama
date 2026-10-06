@@ -3,7 +3,7 @@ import { type Route, type View } from '../router'
 import type { Action, Alert, AlertCondition, AlertHistory, AlertType, IntegrationStatus } from '../types'
 import { api } from '../ui/api'
 import { confirmDialog } from '../ui/dialog'
-import { emptyState, errorState, pill, sectionTitle, segmented, setBusy, skeleton, tickerInput, viewHeader } from '../ui/components'
+import { GRID_MAIN_SIDE, STACK, emptyState, errorState, pill, sectionTitle, segmented, setBusy, skeleton, tickerInput, viewHeader } from '../ui/components'
 import { ACTION_LABEL, fmtBrl, fmtDateTime, fmtNum, isNum, isValidTicker, relTime, shortTicker, stripTags, toTicker } from '../ui/format'
 import { icon } from '../ui/icons'
 import { toast } from '../ui/toast'
@@ -19,7 +19,7 @@ function describeRule(a: Pick<Alert, 'ticker' | 'type' | 'condition' | 'value'>)
 }
 
 export function createAlertsView(): View {
-  const el = h('div', { class: 'view-stack' })
+  const el = h('div', { class: STACK })
 
   // ---- Formulário ----------------------------------------------------------
   const ticker = tickerInput({ id: 'alert-ticker', label: 'Ativo', placeholder: 'Ex.: PETR4' })
@@ -40,18 +40,18 @@ export function createAlertsView(): View {
   const conditionField = h('div', { class: 'field' }, h('label', { for: 'alert-condition' }, 'Disparar quando'), condition)
   const valueField = h('div', { class: 'field' }, valueLabel, valueInput)
   const signalField = h('div', { class: 'field' }, h('label', { for: 'alert-signal' }, 'Sinal igual a'), signalSelect)
-  const preview = h('p', { class: 'alert-preview', 'aria-live': 'polite' })
+  const preview = h('p', { class: 'min-h-[1.4em] font-semibold text-brand empty:hidden', 'aria-live': 'polite' })
   const formHint = h('p', { class: 'field-hint', role: 'status' })
   const createBtn = h('button', { type: 'submit', class: 'btn btn-primary' }, icon('plus', 18), 'Criar alerta')
   const form = h(
     'form',
-    { class: 'card alert-form', novalidate: true },
+    { class: 'card grid gap-[18px] [&>div:first-child]:mb-0', novalidate: true },
     sectionTitle('Novo alerta'),
     h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'O que acompanhar'), typePicker.el),
-    h('div', { class: 'param-grid param-grid-tight' }, h('div', { class: 'field' }, h('label', { for: 'alert-ticker' }, 'Ativo'), ticker), conditionField, valueField, signalField),
+    h('div', { class: 'grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-x-[18px] gap-y-3.5' }, h('div', { class: 'field' }, h('label', { for: 'alert-ticker' }, 'Ativo'), ticker), conditionField, valueField, signalField),
     preview,
     formHint,
-    h('div', { class: 'param-actions' }, createBtn)
+    h('div', { class: 'flex justify-end' }, createBtn)
   )
 
   function syncFields(): void {
@@ -136,12 +136,12 @@ export function createAlertsView(): View {
 
   // ---- Telegram ------------------------------------------------------------
   const telegramBtn = h('button', { type: 'button', class: 'btn btn-secondary' }, icon('send', 18), 'Enviar mensagem de teste')
-  const telegramStatus = h('div', { class: 'telegram-status' }, skeleton(16, 120))
+  const telegramStatus = h('div', { class: 'my-3.5' }, skeleton(16, 120))
   const telegramCard = h(
     'section',
     { class: 'card' },
     sectionTitle('Telegram'),
-    h('p', { class: 'card-body-sm' }, 'Quando um alerta dispara, o aviso chega em tempo real no chat configurado no servidor.'),
+    h('p', { class: 'text-[0.9375rem] leading-normal text-fg-2' }, 'Quando um alerta dispara, o aviso chega em tempo real no chat configurado no servidor.'),
     telegramStatus,
     h('p', { class: 'card-note' }, 'Defina ', h('code', null, 'TELEGRAM_BOT_TOKEN'), ' e ', h('code', null, 'TELEGRAM_CHAT_ID'), ' no ', h('code', null, '.env'), ' do backend.'),
     telegramBtn
@@ -170,7 +170,7 @@ export function createAlertsView(): View {
   }
 
   // ---- Lista de alertas ----------------------------------------------------
-  const listHost = h('div', { class: 'alert-list' }, skeleton(64), skeleton(64))
+  const listHost = h('div', { class: 'grid gap-2.5' }, skeleton(64), skeleton(64))
   const listCard = h('section', { class: 'card' }, sectionTitle('Alertas'), listHost)
 
   function alertRow(a: Alert): HTMLElement {
@@ -203,13 +203,13 @@ export function createAlertsView(): View {
     const lastChecked = a.lastCheckedValue !== null && a.lastCheckedValue !== undefined && a.lastCheckedValue !== '' ? (isNum(Number(a.lastCheckedValue)) && a.type !== 'ml_signal' ? fmtNum(Number(a.lastCheckedValue), 2) : String(a.lastCheckedValue)) : null
     return h(
       'article',
-      { class: `alert-row alert-${a.status}` },
-      h('span', { class: 'alert-type-icon' }, icon(a.type === 'price' ? 'activity' : a.type === 'rsi' ? 'target' : 'sparkles', 20)),
+      { class: `grid grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] items-center gap-3.5 rounded-md border border-line bg-surface-2 px-4 py-3.5 max-phone:grid-cols-[auto_minmax(0,1fr)_auto_auto] max-phone:[&>.pill]:hidden${a.status === 'disabled' ? ' opacity-75' : ''}` },
+      h('span', { class: 'inline-flex size-10 items-center justify-center rounded-md bg-brand-soft text-brand' }, icon(a.type === 'price' ? 'activity' : a.type === 'rsi' ? 'target' : 'sparkles', 20)),
       h(
         'div',
-        { class: 'alert-main' },
-        h('strong', { class: 'alert-rule' }, describeRule(a)),
-        h('span', { class: 'alert-meta' }, TYPE_LABEL[a.type], ' · ', lastChecked ? `última leitura ${lastChecked}` : 'ainda não verificado', a.triggerCount > 0 ? ` · disparou ${a.triggerCount}×` : '', a.lastTriggeredAt ? ` (${relTime(a.lastTriggeredAt)})` : '')
+        { class: 'grid min-w-0 gap-0.5' },
+        h('strong', { class: 'font-bold [overflow-wrap:anywhere]' }, describeRule(a)),
+        h('span', { class: 'text-[0.8125rem] text-fg-3' }, TYPE_LABEL[a.type], ' · ', lastChecked ? `última leitura ${lastChecked}` : 'ainda não verificado', a.triggerCount > 0 ? ` · disparou ${a.triggerCount}×` : '', a.lastTriggeredAt ? ` (${relTime(a.lastTriggeredAt)})` : '')
       ),
       pill(tone, statusText),
       toggle,
@@ -231,7 +231,7 @@ export function createAlertsView(): View {
   }
 
   // ---- Histórico -----------------------------------------------------------
-  const historyHost = h('div', { class: 'history-list' }, skeleton(48), skeleton(48))
+  const historyHost = h('div', { class: 'grid gap-2.5' }, skeleton(48), skeleton(48))
   const clearBtn = h('button', { type: 'button', class: 'btn btn-ghost btn-danger-text', hidden: true }, icon('trash', 16), 'Limpar histórico')
   const historyCard = h('section', { class: 'card' }, sectionTitle('Histórico de disparos', clearBtn), historyHost)
   clearBtn.addEventListener('click', async () => {
@@ -255,7 +255,7 @@ export function createAlertsView(): View {
       }
       historyHost.replaceChildren(
         ...history.map(item =>
-          h('article', { class: 'history-item' }, h('div', { class: 'history-top' }, h('strong', null, shortTicker(item.ticker)), pill('neutral', TYPE_LABEL[item.type] ?? item.type), h('time', { class: 'muted', datetime: item.triggeredAt }, fmtDateTime(item.triggeredAt))), h('p', { class: 'history-msg' }, stripTags(item.message)))
+          h('article', { class: 'grid gap-1.5 rounded-md bg-surface-2 px-3.5 py-3' }, h('div', { class: 'flex flex-wrap items-center gap-x-3 gap-y-2 text-[0.8125rem]' }, h('strong', null, shortTicker(item.ticker)), pill('neutral', TYPE_LABEL[item.type] ?? item.type), h('time', { class: 'ml-auto text-fg-2', datetime: item.triggeredAt }, fmtDateTime(item.triggeredAt))), h('p', { class: 'text-[0.9rem] leading-normal whitespace-pre-line [overflow-wrap:anywhere]' }, stripTags(item.message)))
         )
       )
     } catch (error) {
@@ -265,7 +265,7 @@ export function createAlertsView(): View {
 
   el.append(
     viewHeader({ title: 'Alertas & Telegram', subtitle: 'Seja avisado quando o preço, o RSI ou o sinal da IA de um ativo chegar onde você definiu.' }),
-    h('div', { class: 'grid-main-side' }, form, telegramCard),
+    h('div', { class: GRID_MAIN_SIDE }, form, telegramCard),
     listCard,
     historyCard
   )

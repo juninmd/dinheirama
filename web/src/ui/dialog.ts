@@ -16,9 +16,9 @@ export function confirmDialog(options: ConfirmOptions): Promise<boolean> {
     const confirm = h('button', { type: 'button', class: options.danger ? 'btn btn-danger' : 'btn btn-primary', onClick: () => { answer = true; dialog.close() } }, options.confirmLabel ?? 'Confirmar')
     const cancel = h('button', { type: 'button', class: 'btn btn-ghost', onClick: () => dialog.close() }, options.cancelLabel ?? 'Cancelar')
     dialog.append(
-      h('h2', { id: 'confirm-title', class: 'modal-title' }, options.title),
-      h('p', { id: 'confirm-text', class: 'modal-text' }, options.message),
-      h('div', { class: 'modal-actions' }, cancel, confirm)
+      h('h2', { id: 'confirm-title', class: 'mb-2 text-lg font-bold' }, options.title),
+      h('p', { id: 'confirm-text', class: 'leading-normal text-fg-2' }, options.message),
+      h('div', { class: 'mt-[22px] flex justify-end gap-2.5' }, cancel, confirm)
     )
     dialog.addEventListener('close', () => {
       dialog.remove()

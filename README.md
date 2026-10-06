@@ -35,7 +35,7 @@ A metodologia completa, as premissas e as limitações estão em [`docs/METODOLO
 
 ## Tech Stack
 
-- **Frontend**: [Vite](https://vitejs.dev/) + TypeScript
+- **Frontend**: [Vite](https://vitejs.dev/) + TypeScript + [Tailwind CSS v4](https://tailwindcss.com/) (tema claro/escuro por variáveis CSS)
 - **Runtime**: [Bun](https://bun.sh/)
 - **Backend**: [Hono](https://hono.dev/) + Yahoo Finance (preços e fundamentos) + BCB (CDI)
 - **IA**: LiteLLM (opcional, limitada pela guarda de fatos) e modelo XGBoost de treino em Python

@@ -17,8 +17,8 @@ export function toast(message: string, type: ToastType = 'info', duration = 4000
     el.classList.remove('show')
     setTimeout(() => el.remove(), 250)
   }
-  const close = h('button', { type: 'button', class: 'toast-close', 'aria-label': 'Fechar aviso', onClick: dismiss }, icon('x', 16))
-  el.append(h('span', { class: 'toast-icon' }, icon(ICON[type], 18)), h('span', { class: 'toast-message' }, message), close)
+  const close = h('button', { type: 'button', class: 'inline-flex rounded-md p-1 text-fg-3 hover:text-fg', 'aria-label': 'Fechar aviso', onClick: dismiss }, icon('x', 16))
+  el.append(h('span', { class: 'toast-icon mt-px inline-flex' }, icon(ICON[type], 18)), h('span', { class: 'min-w-0 flex-1 [overflow-wrap:anywhere]' }, message), close)
 
   while (host.childElementCount >= MAX_VISIBLE) host.firstElementChild?.remove()
   host.appendChild(el)

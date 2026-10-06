@@ -1,0 +1,214 @@
+/* Tokens de design: dois temas (escuro é o padrão) via variáveis CSS, expostos ao Tailwind em @theme.
+   Trocar o tema = trocar data-theme no <html>; as utilidades (bg-surface, text-fg-2…) acompanham sozinhas. */
+@custom-variant light (&:where([data-theme='light'], [data-theme='light'] *));
+
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* superfícies */
+  --bg: #080a0f;
+  --bg-elev: #0d1017;
+  --surface: #12161f;
+  --surface-2: #181d29;
+  --surface-3: #212736;
+  --seg-active: #2a3144;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --input-border: #667189;
+
+  /* texto (>= 4.5:1 sobre as superfícies) */
+  --text: #eef1f8;
+  --text-2: #aab3c5;
+  --text-3: #8089a0;
+
+  /* marca */
+  --brand: #8f9cff;
+  --brand-strong: #4f5ee8;
+  --brand-strong-hover: #5967ee;
+  --brand-soft: rgba(124, 140, 255, 0.15);
+  --brand-line: rgba(143, 156, 255, 0.45);
+  --on-brand: #ffffff;
+  --cyan: #38d5f0;
+  --focus: #9aa6ff;
+
+  /* semânticas: cor de texto/ícone, fundo suave e sólido */
+  --pos: #34d399;
+  --pos-soft: rgba(52, 211, 153, 0.14);
+  --pos-solid: #10b981;
+  --neg: #fb7185;
+  --neg-soft: rgba(251, 113, 133, 0.14);
+  --neg-solid: #e11d48;
+  --warn: #fbbf24;
+  --warn-soft: rgba(251, 191, 36, 0.13);
+  --warn-solid: #f59e0b;
+  --info: #7cb6ff;
+  --info-soft: rgba(96, 165, 250, 0.15);
+  --neutral-soft: rgba(255, 255, 255, 0.07);
+  --disclaimer-text: #fcd77a;
+
+  /* elevação */
+  --sh-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --sh-md: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --sh-lg: 0 24px 60px rgba(0, 0, 0, 0.55);
+  --glow: 0 0 0 1px rgba(143, 156, 255, 0.35), 0 8px 28px rgba(79, 94, 232, 0.35);
+
+  /* camada quantitativa (gráficos e células de tabela): validadas para a superfície escura */
+  --text-subtle: var(--text-3);
+  --q-pos: #34d399;
+  --q-neg: #f87171;
+  --q-warn: #fbbf24;
+  --q-info: #93c5fd;
+  --q-accent-text: #a5b4fc;
+  --q-input-border: var(--input-border);
+  --viz-1: #3987e5;
+  --viz-2: #d95926;
+  --viz-neutral: #a0a0b0;
+  --viz-grid: rgba(255, 255, 255, 0.12);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --bg: #f3f5f9;
+  --bg-elev: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f5f7fb;
+  --surface-3: #e8ecf3;
+  --seg-active: #ffffff;
+  --line: rgba(15, 23, 42, 0.09);
+  --line-strong: rgba(15, 23, 42, 0.18);
+  --input-border: #7b8499;
+
+  --text: #0f172a;
+  --text-2: #475569;
+  --text-3: #64748b;
+
+  --brand: #4338ca;
+  --brand-strong: #4f46e5;
+  --brand-strong-hover: #4338ca;
+  --brand-soft: rgba(79, 70, 229, 0.1);
+  --brand-line: rgba(79, 70, 229, 0.4);
+  --cyan: #0e7490;
+  --focus: #4f46e5;
+
+  --pos: #047857;
+  --pos-soft: rgba(5, 150, 105, 0.12);
+  --pos-solid: #059669;
+  --neg: #be123c;
+  --neg-soft: rgba(225, 29, 72, 0.1);
+  --neg-solid: #e11d48;
+  --warn: #92400e;
+  --warn-soft: rgba(217, 119, 6, 0.13);
+  --warn-solid: #d97706;
+  --info: #1d4ed8;
+  --info-soft: rgba(37, 99, 235, 0.1);
+  --neutral-soft: rgba(15, 23, 42, 0.06);
+  --disclaimer-text: #7a4b00;
+
+  --sh-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --sh-md: 0 8px 24px rgba(15, 23, 42, 0.08);
+  --sh-lg: 0 24px 60px rgba(15, 23, 42, 0.18);
+  --glow: 0 0 0 1px rgba(79, 70, 229, 0.3), 0 8px 24px rgba(79, 70, 229, 0.25);
+
+  --q-pos: #047857;
+  --q-neg: #b91c1c;
+  --q-warn: #92400e;
+  --q-info: #1d4ed8;
+  --q-accent-text: #4338ca;
+  --viz-1: #2a78d6;
+  --viz-2: #eb6834;
+  --viz-neutral: #64748b;
+  --viz-grid: rgba(0, 0, 0, 0.12);
+}
+
+/* ---- Tailwind: nomes semânticos apontando para as variáveis acima ---- */
+@theme inline {
+  --font-sans: var(--font);
+  --font-mono: var(--mono);
+
+  --color-bg: var(--bg);
+  --color-elev: var(--bg-elev);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-seg: var(--seg-active);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-field: var(--input-border);
+
+  --color-fg: var(--text);
+  --color-fg-2: var(--text-2);
+  --color-fg-3: var(--text-3);
+
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-hover: var(--brand-strong-hover);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-line: var(--brand-line);
+  --color-on-brand: var(--on-brand);
+  --color-cyan: var(--cyan);
+
+  --color-pos: var(--pos);
+  --color-pos-soft: var(--pos-soft);
+  --color-pos-solid: var(--pos-solid);
+  --color-neg: var(--neg);
+  --color-neg-soft: var(--neg-soft);
+  --color-neg-solid: var(--neg-solid);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-warn-solid: var(--warn-solid);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-neutral-soft: var(--neutral-soft);
+  --color-disclaimer: var(--disclaimer-text);
+
+  --shadow-sm: var(--sh-sm);
+  --shadow-md: var(--sh-md);
+  --shadow-lg: var(--sh-lg);
+  --shadow-glow: var(--glow);
+}
+
+/* valores que não mudam entre temas */
+@theme {
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+
+  --ease-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --spacing-gutter: clamp(16px, 3vw, 40px);
+
+  /* breakpoints "max-*": max-phone = até 720px (barra inferior), max-lg = até 1100px (menu em trilho) */
+  --breakpoint-*: initial;
+  --breakpoint-xs: 481px;
+  --breakpoint-sm: 641px;
+  --breakpoint-phone: 721px;
+  --breakpoint-md: 901px;
+  --breakpoint-lg: 1101px;
+
+  --animate-view-in: view-in 0.3s var(--ease-soft) both;
+  --animate-spin: spin 0.8s linear infinite;
+  --animate-shimmer: shimmer 1.4s linear infinite;
+  --animate-sheet-in: sheet-in 0.28s var(--ease-soft);
+
+  @keyframes view-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes shimmer {
+    to { background-position: -200% 0; }
+  }
+
+  @keyframes sheet-in {
+    from { transform: translateY(40px); opacity: 0; }
+  }
+}

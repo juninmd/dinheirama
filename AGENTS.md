@@ -4,7 +4,7 @@ Projeto pessoal e educacional de pesquisa quantitativa para ações da B3. **Nad
 
 ## Tech Stack
 - **Backend:** Bun + Hono + TypeScript (`core/`), dados via Yahoo Finance e BCB
-- **Frontend:** Vite + TypeScript vanilla (`web/`)
+- **Frontend:** Vite + TypeScript vanilla + Tailwind CSS v4 (`web/`)
 - **Treino (opcional):** Python/XGBoost (`core/training/`)
 - **Deploy:** Docker + ArgoCD (GitOps) em K3s; CI/CD no GitHub Actions
 
@@ -19,7 +19,7 @@ dinheirama/
     src/main.ts         # shell: menu, barra superior, busca rápida (ui/palette.ts), roteamento
     src/views/          # telas: home, analyze, radar, montecarlo, news, training, alerts, quant (lazy)
     src/ui/             # componentes (components.ts), gráficos SVG (charts.ts), ícones, toast, diálogo
-    src/styles/         # tokens.css (temas), base, shell, components, views; quant.css só carrega com a aba
+    src/styles/         # app.css (entrada do Tailwind), theme.css (tokens claro/escuro + @theme), base, components (@apply), visuals (SVG/gráficos); quant.css só carrega com a aba
     src/research-*.ts   # abas da pesquisa quant (DOM sempre via h()/textContent, nunca innerHTML com dado da API)
   docs/METODOLOGIA.md   # metodologia, premissas e limitações
   .github/              # workflows
@@ -32,6 +32,7 @@ dinheirama/
 - `cd core/training && python3 -m unittest test_splits` — testes do split temporal
 
 ## Conventions
+- CSS: Tailwind v4. Layout e espaçamento em utilitários no próprio markup; só o que se repete vira classe em `styles/components.css`. Cores/raios/sombras vêm do tema (`bg-surface`, `text-fg-2`, `border-line`…), nunca hex solto. O Tailwind só gera classes escritas por extenso no código: nada de `` `text-${tone}` `` — use os mapas (`TEXT_TONE`, `BG_TONE`) de `ui/format.ts`.
 - GitOps com ArgoCD; infraestrutura declarativa.
 - Regras da camada quant: sem look-ahead (sinal em `t`, execução em `t+1`), fundamentos só ponto-no-tempo em backtest, pesos não ajustados ao passado, dado ausente nunca vira zero, resultados sempre com custos/IR e ressalvas.
 - O motor de fatores (`quant/factors.ts`) é compartilhado entre backtest e score ao vivo; não duplique a lógica.

@@ -12,6 +12,10 @@ export const SENTIMENT_LABEL: Record<Sentiment, string> = { bullish: 'Positivo',
 /** Tom semântico (cor + sinal no texto: a cor nunca é o único canal). */
 export type Tone = 'pos' | 'neg' | 'warn' | 'info' | 'neutral'
 
+/** Classes completas (o Tailwind só gera o que aparece literalmente no código). */
+export const TEXT_TONE: Record<Tone, string> = { pos: 'text-pos', neg: 'text-neg', warn: 'text-warn', info: 'text-info', neutral: 'text-fg-2' }
+export const BG_TONE: Record<Tone, string> = { pos: 'bg-pos-solid', neg: 'bg-neg-solid', warn: 'bg-warn-solid', info: 'bg-info', neutral: 'bg-fg-3' }
+
 export const actionTone = (a: Action): Tone => (a === 'buy' ? 'pos' : a === 'sell' ? 'neg' : 'warn')
 export const riskTone = (r: Risk): Tone => (r === 'low' ? 'pos' : r === 'high' ? 'neg' : 'warn')
 export const sentimentTone = (s: Sentiment): Tone => (s === 'bullish' ? 'pos' : s === 'bearish' ? 'neg' : 'neutral')

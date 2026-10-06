@@ -17,7 +17,7 @@
     </script>
   </head>
   <body>
-    <svg width="0" height="0" style="position: absolute" aria-hidden="true" focusable="false">
+    <svg width="0" height="0" class="absolute" aria-hidden="true" focusable="false">
       <defs>
         <linearGradient id="brand-g" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stop-color="#7c8cff" />
@@ -25,62 +25,89 @@
         </linearGradient>
       </defs>
     </svg>
-    <a class="skip-link" href="#main">Pular para o conteúdo</a>
-    <div id="toast-container" aria-live="polite" aria-atomic="false"></div>
+    <a
+      class="fixed top-2 left-2 z-[200] -translate-y-[160%] rounded-md bg-brand-strong px-4 py-2.5 font-semibold text-on-brand transition-transform focus:translate-y-0"
+      href="#main"
+      >Pular para o conteúdo</a
+    >
+    <div
+      id="toast-container"
+      class="pointer-events-none fixed right-5 bottom-5 z-[300] grid w-[min(380px,calc(100vw_-_32px))] gap-2.5 max-phone:right-3 max-phone:bottom-[calc(82px_+_env(safe-area-inset-bottom))] max-phone:left-3 max-phone:w-auto"
+      aria-live="polite"
+      aria-atomic="false"
+    ></div>
 
-    <div class="shell">
-      <aside class="sidebar" aria-label="Menu lateral">
-        <a class="brand" href="#/" aria-label="Dinheirama — início">
-          <svg class="brand-mark" viewBox="0 0 32 32" width="34" height="34" aria-hidden="true">
+    <div class="grid min-h-dvh grid-cols-[264px_minmax(0,1fr)] max-lg:grid-cols-[76px_minmax(0,1fr)] max-phone:block">
+      <aside
+        class="sticky top-0 z-20 flex h-dvh flex-col gap-2 overflow-y-auto border-r border-line bg-elev px-3.5 py-[18px] max-lg:px-2.5 max-lg:py-4 max-phone:hidden"
+        aria-label="Menu lateral"
+      >
+        <a class="flex items-center gap-3 px-2 pt-1 pb-4 text-fg no-underline max-lg:justify-center max-lg:px-0" href="#/" aria-label="Dinheirama — início">
+          <svg class="flex-none drop-shadow-[0_6px_14px_rgb(79_94_232/0.45)]" viewBox="0 0 32 32" width="34" height="34" aria-hidden="true">
             <rect width="32" height="32" rx="9" fill="url(#brand-g)" />
             <path d="M7 21.5 13 15l4.2 3.8L25 10" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
             <path d="M19.5 10H25v5.5" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
-          <span class="brand-text"><strong>Dinheirama</strong><small>Radar 24h · B3</small></span>
+          <span class="grid leading-[1.15] max-lg:hidden"
+            ><strong class="text-lg font-bold tracking-[-0.02em]">Dinheirama</strong><small class="text-xs text-fg-3">Radar 24h · B3</small></span
+          >
         </a>
-        <nav id="side-nav" class="side-nav" aria-label="Principal"></nav>
-        <div class="sidebar-foot">
-          <p class="sidebar-note">Projeto pessoal e educacional.<br />Não é recomendação de investimento.</p>
+        <nav id="side-nav" class="grid gap-0.5" aria-label="Principal"></nav>
+        <div class="mt-auto px-2 pt-3 max-lg:hidden">
+          <p class="rounded-md border border-line bg-surface-2 p-3 text-xs leading-normal text-fg-3">
+            Projeto pessoal e educacional.<br />Não é recomendação de investimento.
+          </p>
         </div>
       </aside>
 
-      <div class="main-col">
-        <header class="topbar">
-          <a class="topbar-brand" href="#/" aria-label="Dinheirama — início">
+      <div class="flex min-h-dvh min-w-0 flex-col">
+        <header
+          class="sticky top-0 z-[15] flex h-16 items-center gap-3 border-b border-line bg-bg/80 px-gutter backdrop-blur-md backdrop-saturate-150 max-phone:h-[58px] max-phone:px-3.5"
+        >
+          <a class="hidden flex-none max-phone:inline-flex" href="#/" aria-label="Dinheirama — início">
             <svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true">
               <rect width="32" height="32" rx="9" fill="url(#brand-g)" />
               <path d="M7 21.5 13 15l4.2 3.8L25 10" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
               <path d="M19.5 10H25v5.5" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
           </a>
-          <button id="open-palette" class="search-trigger" type="button" aria-haspopup="dialog">
-            <span class="search-trigger-icon" id="search-trigger-icon"></span>
-            <span class="search-trigger-text">Buscar ação ou ferramenta…</span>
-            <kbd class="kbd" id="search-kbd">Ctrl K</kbd>
+          <button
+            id="open-palette"
+            class="flex h-[42px] max-w-[560px] min-w-0 flex-1 items-center gap-2.5 rounded-md border border-line-strong bg-surface-2 pr-2.5 pl-3.5 text-left text-fg-3 transition hover:border-brand-line hover:text-fg-2"
+            type="button"
+            aria-haspopup="dialog"
+          >
+            <span id="search-trigger-icon" class="inline-flex"></span>
+            <span class="min-w-0 flex-1 truncate text-[0.9375rem]">Buscar ação ou ferramenta…</span>
+            <kbd id="search-kbd" class="kbd max-phone:hidden">Ctrl K</kbd>
           </button>
-          <div class="topbar-actions">
-            <span id="net-status" class="net-status" role="status" hidden></span>
+          <div class="ml-auto flex items-center gap-2">
+            <span id="net-status" class="inline-flex items-center gap-1.5 rounded-full bg-neg-soft px-2.5 py-1 text-xs font-bold text-neg" role="status" hidden></span>
             <button id="theme-toggle" class="icon-btn" type="button"></button>
           </div>
         </header>
 
-        <div class="disclaimer" role="note" aria-label="Aviso legal">
-          <span class="disclaimer-icon" id="disclaimer-icon"></span>
+        <div class="flex items-center justify-center gap-2 border-b border-line bg-warn-soft px-gutter py-[7px] text-center text-[0.8125rem] leading-[1.4] text-disclaimer" role="note" aria-label="Aviso legal">
+          <span id="disclaimer-icon" class="inline-flex"></span>
           <p><strong>Projeto pessoal e educacional. Não é recomendação de investimento.</strong></p>
         </div>
 
-        <main id="main" class="main" tabindex="-1">
-          <noscript><p class="noscript">Este app precisa de JavaScript para funcionar.</p></noscript>
+        <main id="main" class="mx-auto w-full max-w-[1280px] flex-1 px-gutter pt-7 pb-14 outline-none max-phone:pt-5 max-phone:pb-[calc(96px_+_env(safe-area-inset-bottom))]" tabindex="-1">
+          <noscript><p class="p-6 text-center">Este app precisa de JavaScript para funcionar.</p></noscript>
           <div id="views"></div>
         </main>
 
-        <footer class="app-footer">
-          <p class="footer-disclaimer"><strong>Projeto pessoal e educacional. Não é recomendação de investimento.</strong></p>
+        <footer class="border-t border-line px-gutter pt-6 pb-8 text-center text-[0.8125rem] leading-relaxed text-fg-3 max-phone:pb-[calc(88px_+_env(safe-area-inset-bottom))]">
+          <p class="text-fg-2"><strong>Projeto pessoal e educacional. Não é recomendação de investimento.</strong></p>
           <p>Dados: Yahoo Finance e BCB • IA: Ollama • fast-news/papers via env • Uso educacional</p>
         </footer>
       </div>
 
-      <nav id="tab-bar" class="tabbar" aria-label="Navegação rápida"></nav>
+      <nav
+        id="tab-bar"
+        class="fixed inset-x-0 bottom-0 z-30 hidden grid-cols-5 border-t border-line bg-elev/90 px-1.5 pt-1.5 pb-[calc(6px_+_env(safe-area-inset-bottom))] backdrop-blur-lg backdrop-saturate-150 max-phone:grid"
+        aria-label="Navegação rápida"
+      ></nav>
     </div>
 
     <script type="module" src="/src/main.ts"></script>

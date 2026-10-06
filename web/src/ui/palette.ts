@@ -22,7 +22,7 @@ const fold = (text: string): string => text.normalize('NFD').replace(/[̀-ͯ]/g,
 export function createPalette(): { open(): void; close(): void } {
   const input = h('input', {
     type: 'text',
-    class: 'palette-input',
+    class: 'min-w-0 flex-1 bg-transparent text-[1.0625rem] text-fg outline-none placeholder:text-fg-3',
     role: 'combobox',
     'aria-expanded': 'true',
     'aria-controls': 'palette-list',
@@ -33,11 +33,23 @@ export function createPalette(): { open(): void; close(): void } {
     autocapitalize: 'off',
     spellcheck: 'false',
   })
-  const list = h('ul', { class: 'palette-list', id: 'palette-list', role: 'listbox', 'aria-label': 'Resultados' })
+  const list = h('ul', { class: 'flex-1 overflow-y-auto px-2 pt-1.5 pb-2', id: 'palette-list', role: 'listbox', 'aria-label': 'Resultados' })
   const dialog = h(
     'dialog',
     { class: 'palette', 'aria-label': 'Busca rápida' },
-    h('div', { class: 'palette-box' }, h('div', { class: 'palette-head' }, icon('search', 20), input, h('kbd', { class: 'kbd' }, 'Esc')), list, h('div', { class: 'palette-foot' }, h('span', null, h('kbd', { class: 'kbd' }, '↑'), h('kbd', { class: 'kbd' }, '↓'), ' navegar'), h('span', null, h('kbd', { class: 'kbd' }, 'Enter'), ' abrir'), h('span', { class: 'palette-foot-note' }, 'Não é recomendação de investimento')))
+    h(
+      'div',
+      { class: 'flex max-h-[inherit] flex-col' },
+      h('div', { class: 'flex items-center gap-3 border-b border-line px-4 py-3.5 text-fg-3' }, icon('search', 20), input, h('kbd', { class: 'kbd' }, 'Esc')),
+      list,
+      h(
+        'div',
+        { class: 'flex flex-wrap gap-x-4 gap-y-1 border-t border-line px-4 py-2.5 text-xs text-fg-3' },
+        h('span', { class: 'max-phone:hidden' }, h('kbd', { class: 'kbd mr-[3px]' }, '↑'), h('kbd', { class: 'kbd mr-[3px]' }, '↓'), ' navegar'),
+        h('span', { class: 'max-phone:hidden' }, h('kbd', { class: 'kbd mr-[3px]' }, 'Enter'), ' abrir'),
+        h('span', { class: 'ml-auto max-phone:ml-0' }, 'Não é recomendação de investimento')
+      )
+    )
   )
   document.body.appendChild(dialog)
 
@@ -101,7 +113,7 @@ export function createPalette(): { open(): void; close(): void } {
     active = Math.min(active, Math.max(0, items.length - 1))
     list.replaceChildren()
     if (items.length === 0) {
-      list.appendChild(h('li', { class: 'palette-empty', role: 'presentation' }, `Nada encontrado para “${input.value}”. Tente um código como PETR4.`))
+      list.appendChild(h('li', { class: 'px-3 py-7 text-center text-fg-2', role: 'presentation' }, `Nada encontrado para “${input.value}”. Tente um código como PETR4.`))
       input.removeAttribute('aria-activedescendant')
       return
     }
@@ -109,9 +121,9 @@ export function createPalette(): { open(): void; close(): void } {
     items.forEach((item, i) => {
       if (item.group !== lastGroup) {
         lastGroup = item.group
-        list.appendChild(h('li', { class: 'palette-group', role: 'presentation' }, item.group))
+        list.appendChild(h('li', { class: 'px-2.5 pt-3 pb-1 text-[0.6875rem] font-bold tracking-[0.08em] text-fg-3 uppercase', role: 'presentation' }, item.group))
       }
-      const row = h('li', { class: `palette-item${i === active ? ' is-active' : ''}`, role: 'option', id: `pal-${i}`, 'aria-selected': String(i === active) }, h('span', { class: 'palette-icon' }, icon(item.icon, 18)), h('span', { class: 'palette-label' }, item.label), item.hint ? h('span', { class: 'palette-hint' }, item.hint) : null)
+      const row = h('li', { class: `palette-item${i === active ? ' is-active' : ''}`, role: 'option', id: `pal-${i}`, 'aria-selected': String(i === active) }, h('span', { class: 'palette-icon inline-flex text-fg-2' }, icon(item.icon, 18)), h('span', { class: 'min-w-0 flex-1 font-semibold' }, item.label), item.hint ? h('span', { class: 'min-w-0 truncate text-[0.8125rem] text-fg-3 max-phone:hidden' }, item.hint) : null)
       row.addEventListener('pointermove', () => setActive(i, false))
       row.addEventListener('click', () => choose(i))
       list.appendChild(row)

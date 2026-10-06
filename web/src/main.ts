@@ -1,8 +1,4 @@
-import './styles/tokens.css'
-import './styles/base.css'
-import './styles/shell.css'
-import './styles/components.css'
-import './styles/views.css'
+import './styles/app.css'
 
 import { h } from './research-dom'
 import { GROUPS, MOBILE_PRIMARY, NAV, TITLES, type NavItem } from './nav'
@@ -37,15 +33,19 @@ theme.init()
 
 // ---- Navegação (lateral no desktop, barra inferior no celular) -----------------
 
-function navLink(item: NavItem, className: string): HTMLAnchorElement {
-  return h('a', { class: className, href: pathFor(item.id), 'data-nav': item.id, title: item.label }, icon(item.icon, 20), h('span', { class: 'nav-label' }, item.label))
+// no trilho de ícones (tablet) o rótulo some; na barra inferior ele sempre aparece
+function navLink(item: NavItem, className: string, labelClass = ''): HTMLAnchorElement {
+  return h('a', { class: className, href: pathFor(item.id), 'data-nav': item.id, title: item.label }, icon(item.icon, 20), h('span', { class: labelClass || null }, item.label))
 }
+
+const GROUP_TITLE =
+  'px-3 pt-4 pb-1.5 text-[0.6875rem] font-bold tracking-[0.08em] text-fg-3 uppercase max-lg:mx-2 max-lg:my-2.5 max-lg:h-px max-lg:overflow-hidden max-lg:bg-line max-lg:p-0 max-lg:text-[0px]'
 
 function buildNavigation(): void {
   const side = $('side-nav')
   for (const group of GROUPS) {
-    side.appendChild(h('p', { class: 'nav-group' }, group))
-    for (const item of NAV.filter(n => n.group === group)) side.appendChild(navLink(item, 'nav-link'))
+    side.appendChild(h('p', { class: GROUP_TITLE }, group))
+    for (const item of NAV.filter(n => n.group === group)) side.appendChild(navLink(item, 'nav-link', 'max-lg:hidden'))
   }
 
   const bar = $('tab-bar')
@@ -53,17 +53,17 @@ function buildNavigation(): void {
     const item = NAV.find(n => n.id === id)
     if (item) bar.appendChild(navLink(item, 'tab-link'))
   }
-  const more = h('button', { type: 'button', class: 'tab-link', id: 'more-btn', 'aria-haspopup': 'dialog', title: 'Mais ferramentas' }, icon('more', 20), h('span', { class: 'nav-label' }, 'Mais'))
+  const more = h('button', { type: 'button', class: 'tab-link', id: 'more-btn', 'aria-haspopup': 'dialog', title: 'Mais ferramentas' }, icon('more', 20), h('span', null, 'Mais'))
   bar.appendChild(more)
 
   // folha "Mais": o que não cabe na barra + tema
   const sheet = h('dialog', { class: 'sheet', 'aria-label': 'Mais ferramentas' })
   const rest = NAV.filter(n => !MOBILE_PRIMARY.includes(n.id))
   sheet.append(
-    h('div', { class: 'sheet-grip', 'aria-hidden': 'true' }),
-    h('h2', { class: 'sheet-title' }, 'Mais ferramentas'),
-    h('div', { class: 'sheet-list' }, ...rest.map(item => h('a', { class: 'sheet-item', href: pathFor(item.id), 'data-nav': item.id, onClick: () => sheet.close() }, h('span', { class: 'explore-icon' }, icon(item.icon, 20)), h('span', { class: 'explore-text' }, h('strong', null, item.label), h('span', null, item.description))))),
-    h('button', { type: 'button', class: 'btn btn-ghost sheet-close', onClick: () => sheet.close() }, 'Fechar')
+    h('div', { class: 'mx-auto mb-3.5 h-[5px] w-11 rounded-full bg-line-strong', 'aria-hidden': 'true' }),
+    h('h2', { class: 'mb-2 text-[1.0625rem] font-bold' }, 'Mais ferramentas'),
+    h('div', { class: 'grid gap-1' }, ...rest.map(item => h('a', { class: 'sheet-item', href: pathFor(item.id), 'data-nav': item.id, onClick: () => sheet.close() }, h('span', { class: 'explore-icon' }, icon(item.icon, 20)), h('span', { class: 'explore-text' }, h('strong', null, item.label), h('span', null, item.description))))),
+    h('button', { type: 'button', class: 'btn btn-ghost mt-2 w-full', onClick: () => sheet.close() }, 'Fechar')
   )
   sheet.addEventListener('click', event => {
     if (event.target === sheet) sheet.close()
@@ -101,7 +101,7 @@ function renderRoute(): void {
   let view = views.get(id)
   if (!view) {
     view = (FACTORIES[id] as () => View)()
-    view.el.classList.add('view')
+    view.el.classList.add('view', 'animate-view-in')
     view.el.hidden = true
     view.el.dataset.view = id
     host.appendChild(view.el)

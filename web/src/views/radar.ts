@@ -2,11 +2,17 @@ import { h } from '../research-dom'
 import { hrefAnalyze, type Route, type View } from '../router'
 import type { Action, PortfolioResponse, RadarStock } from '../types'
 import { api } from '../ui/api'
-import { emptyState, errorState, loadingPanel, pill, richText, sectionTitle, segmented, setBusy, skeleton, statTile, viewHeader } from '../ui/components'
-import { ACTION_LABEL, RISK_LABEL, actionTone, fmtChange, fmtNum, fmtPrice, isNum, relTime, riskTone, rsiTone, shortTicker, signTone } from '../ui/format'
+import { DISCLAIMER_INLINE, GRID_TILES, OUT, STACK, TOOLBAR, emptyState, errorState, loadingPanel, pill, richText, sectionTitle, segmented, setBusy, skeleton, statTile, viewHeader } from '../ui/components'
+import { ACTION_LABEL, BG_TONE, type Tone, RISK_LABEL, TEXT_TONE, actionTone, fmtChange, fmtNum, fmtPrice, isNum, relTime, riskTone, rsiTone, shortTicker, signTone } from '../ui/format'
 import { icon } from '../ui/icons'
 import { toast } from '../ui/toast'
 import { watchToggle } from '../ui/watch'
+
+const RADAR_GRID = 'grid grid-cols-[repeat(auto-fill,minmax(290px,1fr))] gap-3.5'
+
+function metric(label: string, value: string, tone: Tone): HTMLElement {
+  return h('div', null, h('dt', { class: 'text-[0.6875rem] text-fg-3' }, label), h('dd', { class: `text-[0.9375rem] font-bold tabular-nums ${TEXT_TONE[tone]}` }, value))
+}
 
 type Filter = 'all' | Action
 type SortKey = 'score' | 'change' | 'history' | 'rsi'
@@ -19,9 +25,9 @@ const SORTS: Array<{ key: SortKey; label: string; get: (s: RadarStock) => number
 ]
 
 export function createRadarView(): View {
-  const el = h('div', { class: 'view-stack' })
+  const el = h('div', { class: STACK })
   const runBtn = h('button', { type: 'button', class: 'btn btn-primary' }, icon('radar', 18), 'Gerar radar')
-  const out = h('div', { class: 'radar-out' })
+  const out = h('div', { class: OUT })
   el.append(
     viewHeader({ title: 'Radar B3', subtitle: 'Ranking das ações monitoradas por score, com sinal do modelo, risco e impacto das notícias.', actions: [runBtn] }),
     out
@@ -51,7 +57,7 @@ export function createRadarView(): View {
     busy = true
     setBusy(runBtn, true, 'Analisando…')
     out.replaceChildren(
-      loadingPanel('Analisando as ações da B3…', h('div', { class: 'grid-tiles' }, skeleton(84), skeleton(84), skeleton(84), skeleton(84)), h('div', { class: 'radar-grid' }, ...Array.from({ length: 6 }, () => skeleton(190))))
+      loadingPanel('Analisando as ações da B3…', h('div', { class: GRID_TILES }, skeleton(84), skeleton(84), skeleton(84), skeleton(84)), h('div', { class: RADAR_GRID }, ...Array.from({ length: 6 }, () => skeleton(190))))
     )
     try {
       data = await api<PortfolioResponse>('/api/portfolio', {}, { timeoutMs: 150_000 })
@@ -70,27 +76,27 @@ export function createRadarView(): View {
   function card(stock: RadarStock, rank: number): HTMLElement {
     const aT = actionTone(stock.action)
     const tone = signTone(stock.change)
-    const bar = h('span', { class: `score-bar-fill tone-bg-${aT}` })
+    const bar = h('span', { class: `block h-full rounded-full ${BG_TONE[aT]}` })
     bar.style.width = `${Math.max(0, Math.min(100, stock.score))}%`
     return h(
       'article',
-      { class: 'radar-card' },
+      { class: 'grid gap-3.5 rounded-lg border border-line bg-surface p-4 transition hover:border-brand-line hover:shadow-md' },
       h(
         'div',
-        { class: 'radar-card-top' },
-        h('span', { class: 'rank', 'aria-label': `Posição ${rank}` }, String(rank)),
-        h('a', { class: 'radar-id', href: hrefAnalyze(stock.ticker) }, h('strong', null, shortTicker(stock.ticker)), h('span', null, stock.name && stock.name !== stock.ticker ? stock.name : 'Ação da B3')),
+        { class: 'flex items-center gap-2.5' },
+        h('span', { class: 'inline-flex size-[26px] flex-none items-center justify-center rounded-full bg-surface-3 text-xs font-bold text-fg-2', 'aria-label': `Posição ${rank}` }, String(rank)),
+        h('a', { class: 'group grid min-w-0 flex-1 text-fg no-underline', href: hrefAnalyze(stock.ticker) }, h('strong', { class: 'text-[1.0625rem] tracking-[-0.01em] group-hover:text-brand' }, shortTicker(stock.ticker)), h('span', { class: 'truncate text-xs text-fg-3' }, stock.name && stock.name !== stock.ticker ? stock.name : 'Ação da B3')),
         pill(aT, ACTION_LABEL[stock.action]),
         watchToggle(stock.ticker)
       ),
-      h('div', { class: 'radar-price' }, h('strong', null, fmtPrice(stock.price)), h('span', { class: `tone-${tone}` }, tone === 'pos' ? icon('up', 14) : tone === 'neg' ? icon('down', 14) : null, `${fmtChange(stock.change)} hoje`)),
-      h('div', { class: 'score-row' }, h('span', { class: 'score-num' }, `${Math.round(stock.score)}`, h('small', null, '/100')), h('span', { class: 'score-bar', 'aria-hidden': 'true' }, bar)),
+      h('div', { class: 'flex items-baseline justify-between gap-2' }, h('strong', { class: 'text-[1.375rem] tracking-[-0.02em] tabular-nums' }, fmtPrice(stock.price)), h('span', { class: `inline-flex items-center gap-1 text-sm font-semibold tabular-nums ${TEXT_TONE[tone]}` }, tone === 'pos' ? icon('up', 14) : tone === 'neg' ? icon('down', 14) : null, `${fmtChange(stock.change)} hoje`)),
+      h('div', { class: 'flex items-center gap-3' }, h('span', { class: 'min-w-[3.4rem] text-lg font-extrabold tabular-nums' }, `${Math.round(stock.score)}`, h('small', { class: 'text-[0.6875rem] font-semibold text-fg-3' }, '/100')), h('span', { class: 'h-2 flex-1 overflow-hidden rounded-full bg-surface-3', 'aria-hidden': 'true' }, bar)),
       h(
         'dl',
-        { class: 'radar-metrics' },
-        h('div', null, h('dt', null, '30 dias'), h('dd', { class: `tone-${signTone(stock.historyChange)}` }, fmtChange(stock.historyChange))),
-        h('div', null, h('dt', null, 'RSI'), h('dd', { class: `tone-${rsiTone(stock.rsi)}` }, isNum(stock.rsi) ? fmtNum(stock.rsi, 0) : '—')),
-        h('div', null, h('dt', null, 'Risco'), h('dd', { class: `tone-${riskTone(stock.risk)}` }, RISK_LABEL[stock.risk]))
+        { class: 'grid grid-cols-3 gap-2 border-t border-line pt-3' },
+        metric('30 dias', fmtChange(stock.historyChange), signTone(stock.historyChange)),
+        metric('RSI', isNum(stock.rsi) ? fmtNum(stock.rsi, 0) : '—', rsiTone(stock.rsi)),
+        metric('Risco', RISK_LABEL[stock.risk], riskTone(stock.risk))
       )
     )
   }
@@ -108,7 +114,7 @@ export function createRadarView(): View {
         if (!isNum(vb)) return -1
         return vb - va
       })
-    listHost.replaceChildren(...(rows.length > 0 ? rows.map((s, i) => card(s, i + 1)) : [h('p', { class: 'muted' }, 'Nenhuma ação neste filtro.')]))
+    listHost.replaceChildren(...(rows.length > 0 ? rows.map((s, i) => card(s, i + 1)) : [h('p', { class: 'text-fg-2' }, 'Nenhuma ação neste filtro.')]))
   }
 
   function render(): void {
@@ -119,7 +125,7 @@ export function createRadarView(): View {
 
     const tiles = h(
       'div',
-      { class: 'grid-tiles' },
+      { class: GRID_TILES },
       statTile('Ações analisadas', String(data.tickersAnalyzed), `atualizado ${relTime(fetchedAt)}`),
       statTile('Sinal “comprar”', String(count('buy')), 'score alto', { tone: 'pos' }),
       statTile('Sinal “manter”', String(count('hold')), 'score intermediário', { tone: 'warn' }),
@@ -141,22 +147,22 @@ export function createRadarView(): View {
         { value: 'sell', label: 'Vender', count: count('sell') },
       ],
     })
-    const sortSelect = h('select', { class: 'select', 'aria-label': 'Ordenar por' }, ...SORTS.map(s => h('option', { value: s.key, selected: s.key === sortKey }, s.label)))
+    const sortSelect = h('select', { class: 'select min-h-[38px] w-auto', 'aria-label': 'Ordenar por' }, ...SORTS.map(s => h('option', { value: s.key, selected: s.key === sortKey }, s.label)))
     sortSelect.addEventListener('change', () => {
       sortKey = sortSelect.value as SortKey
       renderList()
     })
-    listHost = h('div', { class: 'radar-grid' })
+    listHost = h('div', { class: RADAR_GRID })
 
     const strategy = h(
       'section',
-      { class: 'card ai-card' },
+      { class: 'card' },
       sectionTitle('Estratégia do assistente', pill('info', data.aiSource, { icon: 'sparkles' })),
       h('div', { class: 'prose' }, richText(data.recommendation || 'Sem texto de estratégia disponível.')),
-      h('p', { class: 'disclaimer-inline' }, icon('alert', 14), 'Leitura automática para estudo. Não é recomendação de investimento.')
+      h('p', { class: DISCLAIMER_INLINE }, icon('alert', 14), 'Leitura automática para estudo. Não é recomendação de investimento.')
     )
 
-    out.replaceChildren(tiles, h('div', { class: 'toolbar' }, filterControl.el, h('label', { class: 'toolbar-field' }, h('span', null, 'Ordenar'), sortSelect)), listHost, strategy)
+    out.replaceChildren(tiles, h('div', { class: TOOLBAR }, filterControl.el, h('label', { class: 'inline-flex items-center gap-2.5 text-[0.8125rem] font-semibold text-fg-2' }, h('span', null, 'Ordenar'), sortSelect)), listHost, strategy)
     renderList()
   }
 

@@ -3,30 +3,51 @@
 import { describeError } from '../research-api'
 import { type Child, h, s } from '../research-dom'
 import type { Tone } from './format'
-import { UNIVERSE } from './format'
+import { TEXT_TONE, UNIVERSE } from './format'
 import { type IconName, icon } from './icons'
+
+// ---- Classes de layout compartilhadas pelas telas ----
+export const STACK = 'grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5'
+export const OUT = 'grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4'
+export const GRID_3 = 'grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-4'
+export const GRID_TILES = 'grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3'
+export const GRID_TILES_3 = 'grid grid-cols-3 gap-3 max-sm:grid-cols-2'
+export const GRID_MAIN_SIDE = 'grid grid-cols-[minmax(0,1.7fr)_minmax(300px,1fr)] items-start gap-4 max-md:grid-cols-[minmax(0,1fr)]'
+export const GRID_2 = 'grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] gap-4 max-md:grid-cols-[minmax(0,1fr)]'
+export const PARAM_GRID = 'grid grid-cols-[repeat(auto-fit,minmax(210px,1fr))] gap-x-[18px] gap-y-3.5'
+export const TOOLBAR = 'flex flex-wrap items-center justify-between gap-3'
+export const SEARCH_BAR = 'flex flex-wrap gap-2.5 max-xs:[&_.btn]:flex-[1_1_100%]'
+export const INPUT_GROW = 'w-auto min-w-0 flex-[1_1_220px]'
+export const CHIPS = 'mt-3.5 grid gap-2 empty:hidden'
+export const LINK_ARROW = 'mt-2.5 inline-flex items-center gap-1.5 text-sm font-semibold no-underline hover:underline'
+export const DISCLAIMER_INLINE = 'mt-4 flex items-start gap-2 border-t border-dashed border-line-strong pt-3.5 text-[0.8125rem] leading-[1.45] text-fg-3 [&_.icon]:mt-0.5 [&_.icon]:text-warn'
+export const BIG_METRIC = 'flex flex-wrap items-baseline gap-2.5'
+export const SECTION_PAD = 'p-4'
 
 export function pill(tone: Tone, content: Child, opts: { icon?: IconName; title?: string } = {}): HTMLElement {
   return h('span', { class: `pill pill-${tone}`, title: opts.title }, opts.icon ? icon(opts.icon, 14) : null, content)
 }
 
+export const EYEBROW = 'mb-1.5 text-xs font-bold tracking-[0.1em] text-brand uppercase'
+export const VIEW_TITLE = 'text-[clamp(1.5rem,1.15rem+1.2vw,2.125rem)] font-extrabold tracking-[-0.03em] outline-none'
+
 export function viewHeader(opts: { title: string; subtitle?: string; eyebrow?: string; actions?: Child[] }): HTMLElement {
   return h(
     'header',
-    { class: 'view-header' },
+    { class: 'flex flex-wrap items-end justify-between gap-4' },
     h(
       'div',
-      { class: 'view-header-text' },
-      opts.eyebrow ? h('p', { class: 'eyebrow' }, opts.eyebrow) : null,
-      h('h1', { class: 'view-title', tabindex: -1 }, opts.title),
-      opts.subtitle ? h('p', { class: 'view-subtitle' }, opts.subtitle) : null
+      { class: 'min-w-0' },
+      opts.eyebrow ? h('p', { class: EYEBROW }, opts.eyebrow) : null,
+      h('h1', { class: VIEW_TITLE, tabindex: -1 }, opts.title),
+      opts.subtitle ? h('p', { class: 'mt-1.5 max-w-[68ch] text-fg-2' }, opts.subtitle) : null
     ),
-    opts.actions && opts.actions.length > 0 ? h('div', { class: 'view-actions' }, ...opts.actions) : null
+    opts.actions && opts.actions.length > 0 ? h('div', { class: 'flex flex-wrap gap-2.5' }, ...opts.actions) : null
   )
 }
 
 export function sectionTitle(text: string, aside?: Child): HTMLElement {
-  return h('div', { class: 'section-title' }, h('h2', null, text), aside ?? null)
+  return h('div', { class: 'mb-3.5 flex items-center justify-between gap-3' }, h('h2', { class: 'text-[1.0625rem] font-bold' }, text), aside ?? null)
 }
 
 export function emptyState(opts: { icon: IconName; title: string; text?: string; action?: Child }): HTMLElement {
@@ -48,7 +69,7 @@ export function errorState(error: unknown, retry?: () => void): HTMLElement {
     h('span', { class: 'empty-icon empty-icon-bad' }, icon('alert', 26)),
     h('p', { class: 'empty-title' }, view.title),
     h('p', { class: 'empty-text' }, view.message),
-    view.details.length > 0 ? h('ul', { class: 'error-details' }, ...view.details.map(d => h('li', null, d))) : null,
+    view.details.length > 0 ? h('ul', { class: 'grid list-disc gap-1 pl-5 text-left text-sm text-fg-2' }, ...view.details.map(d => h('li', null, d))) : null,
     view.hint ? h('p', { class: 'empty-text' }, view.hint) : null,
     retry ? h('button', { type: 'button', class: 'btn btn-secondary', onClick: retry }, icon('refresh', 16), 'Tentar novamente') : null
   )
@@ -64,8 +85,8 @@ export function skeleton(height: number | string = 16, width: number | string = 
 export function loadingPanel(message: string, ...blocks: HTMLElement[]): HTMLElement {
   return h(
     'div',
-    { class: 'loading-panel', role: 'status', 'aria-live': 'polite' },
-    h('div', { class: 'loading-head' }, h('span', { class: 'spinner', 'aria-hidden': 'true' }), h('span', null, message)),
+    { class: 'grid gap-4', role: 'status', 'aria-live': 'polite' },
+    h('div', { class: 'flex items-center gap-3 text-fg-2' }, h('span', { class: 'spinner', 'aria-hidden': 'true' }), h('span', null, message)),
     ...blocks
   )
 }
@@ -195,7 +216,7 @@ export function scoreRing(score: number, tone: Tone, size = 132): HTMLElement {
   const circumference = 2 * Math.PI * radius
   const clamped = Math.max(0, Math.min(100, score))
   const arc = s('circle', {
-    class: 'ring-arc',
+    class: 'score-arc',
     cx: 60,
     cy: 60,
     r: radius,
@@ -207,10 +228,10 @@ export function scoreRing(score: number, tone: Tone, size = 132): HTMLElement {
   const svg = s(
     'svg',
     { viewBox: '0 0 120 120', width: size, height: size, role: 'img', 'aria-label': `Score ${Math.round(clamped)} de 100` },
-    s('circle', { class: 'ring-track', cx: 60, cy: 60, r: radius }),
+    s('circle', { class: 'score-track', cx: 60, cy: 60, r: radius }),
     arc
   )
-  return h('div', { class: `ring ring-${tone}` }, svg, h('div', { class: 'ring-center' }, h('strong', null, String(Math.round(clamped))), h('span', null, 'de 100')))
+  return h('div', { class: `score-ring score-ring-${tone}` }, svg, h('div', { class: 'score-center' }, h('strong', null, String(Math.round(clamped))), h('span', null, 'de 100')))
 }
 
 /** Faixa 0–100 com zonas (sobrevendido < 30 < neutro < 70 < sobrecomprado) e marcador na posição do RSI. */
@@ -229,7 +250,7 @@ export function statTile(label: string, value: Child, hint?: string | null, opts
     'div',
     { class: 'tile', title: opts.title },
     h('span', { class: 'tile-label' }, label),
-    h('span', { class: `tile-value${opts.tone && opts.tone !== 'neutral' ? ` tone-${opts.tone}` : ''}` }, value),
+    h('span', { class: `tile-value${opts.tone && opts.tone !== 'neutral' ? ` ${TEXT_TONE[opts.tone]}` : ''}` }, value),
     hint ? h('span', { class: 'tile-hint' }, hint) : null
   )
 }
@@ -245,12 +266,13 @@ export function ensureTickerList(): void {
   document.body.appendChild(h('datalist', { id: TICKER_LIST_ID }, ...UNIVERSE.map(u => h('option', { value: u.ticker.replace(/\.SA$/, '') }, u.name))))
 }
 
-export function tickerInput(opts: { id: string; label: string; placeholder?: string; value?: string }): HTMLInputElement {
+/** `grow` = campo de uma barra de busca em linha (ocupa o espaço livre ao lado do botão). */
+export function tickerInput(opts: { id: string; label: string; placeholder?: string; value?: string; grow?: boolean }): HTMLInputElement {
   ensureTickerList()
   return h('input', {
     type: 'text',
     id: opts.id,
-    class: 'input',
+    class: opts.grow ? `input ${INPUT_GROW}` : 'input',
     list: TICKER_LIST_ID,
     placeholder: opts.placeholder ?? 'Ex.: PETR4',
     value: opts.value ?? '',
@@ -267,8 +289,8 @@ export function chipRow(label: string, tickers: readonly string[], onPick: (tick
   if (tickers.length === 0) return null
   return h(
     'div',
-    { class: 'chip-row' },
-    h('span', { class: 'chip-row-label' }, label),
+    { class: 'flex flex-wrap items-center gap-2' },
+    h('span', { class: 'text-xs font-semibold text-fg-3' }, label),
     ...tickers.map(t => h('button', { type: 'button', class: 'chip', onClick: () => onPick(t) }, t.replace(/\.SA$/, '')))
   )
 }

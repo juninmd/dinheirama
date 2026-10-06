@@ -1,7 +1,7 @@
 // Gráficos SVG/HTML leves, sem dependências: preço (área com cursor), sparkline, faixa de percentis e fronteira.
 
 import { h, s } from '../research-dom'
-import { fmtBrl, fmtDate, fmtNum, fmtSignedPoints } from './format'
+import { TEXT_TONE, fmtBrl, fmtDate, fmtNum, fmtSignedPoints } from './format'
 
 function niceStep(range: number, ticks: number): number {
   const raw = range / Math.max(1, ticks)
@@ -35,8 +35,8 @@ export function priceChart(points: PricePoint[]): HTMLElement {
   const W = compact ? 360 : 720
   const H = compact ? 240 : 260
   const pad = { l: 8, r: 52, t: 14, b: 26 }
-  const wrap = h('div', { class: 'chart', role: 'group', 'aria-label': 'Gráfico de preço de fechamento' })
-  if (points.length < 2) return h('p', { class: 'muted' }, 'Histórico insuficiente para o gráfico.')
+  const wrap = h('div', { class: 'relative min-w-0', role: 'group', 'aria-label': 'Gráfico de preço de fechamento' })
+  if (points.length < 2) return h('p', { class: 'text-fg-2' }, 'Histórico insuficiente para o gráfico.')
 
   const closes = points.map(p => p.close)
   const lo = Math.min(...closes)
@@ -72,9 +72,9 @@ export function priceChart(points: PricePoint[]): HTMLElement {
   svg.append(cursor, dot)
 
   const tip = h('div', { class: 'chart-tip', hidden: true })
-  const tipDate = h('span', { class: 'chart-tip-date' })
+  const tipDate = h('span', { class: 'text-xs text-fg-3' })
   const tipValue = h('strong', null)
-  const tipDelta = h('span', { class: 'chart-tip-delta' })
+  const tipDelta = h('span', { class: 'text-xs font-semibold' })
   tip.append(tipDate, tipValue, tipDelta)
 
   const live = h('p', { class: 'sr-only', 'aria-live': 'polite' })
@@ -94,7 +94,7 @@ export function priceChart(points: PricePoint[]): HTMLElement {
     tipValue.textContent = fmtBrl(p.close)
     const delta = ((p.close - first.close) / first.close) * 100
     tipDelta.textContent = `${fmtSignedPoints(delta, 1)} no período`
-    tipDelta.className = `chart-tip-delta tone-${delta >= 0 ? 'pos' : 'neg'}`
+    tipDelta.className = `text-xs font-semibold ${TEXT_TONE[delta >= 0 ? 'pos' : 'neg']}`
     tip.hidden = false
     const pct = (px / W) * 100
     tip.style.left = `${Math.min(Math.max(pct, 12), 88)}%`
@@ -176,7 +176,7 @@ export function percentileBand(stats: BandStats, mean?: number): HTMLElement {
   }
   return h(
     'div',
-    { class: 'band', role: 'img', 'aria-label': `Distribuição simulada: 5% dos cenários abaixo de ${fmtSignedPoints(stats.p5, 1)}, mediana ${fmtSignedPoints(stats.p50, 1)}, 95% abaixo de ${fmtSignedPoints(stats.p95, 1)}` },
+    { class: 'pb-1', role: 'img', 'aria-label': `Distribuição simulada: 5% dos cenários abaixo de ${fmtSignedPoints(stats.p5, 1)}, mediana ${fmtSignedPoints(stats.p50, 1)}, 95% abaixo de ${fmtSignedPoints(stats.p95, 1)}` },
     h('div', { class: 'band-track' }, box(stats.p5, stats.p95, 'band-wide'), box(stats.p25, stats.p75, 'band-core'), mark(0, 'band-zero'), mark(stats.p50, 'band-median'), mean !== undefined ? mark(mean, 'band-mean') : null),
     h('div', { class: 'band-labels' }, label(stats.p5, 'P5 '), label(stats.p50, 'Mediana '), label(stats.p95, 'P95 '))
   )
@@ -199,7 +199,7 @@ export function frontierChart(points: FrontierPoint[], marks: FrontierMark[]): H
   const H = compact ? 280 : 300
   const pad = { l: 54, r: 14, t: 14, b: 40 }
   const all = [...points, ...marks]
-  if (all.length === 0) return h('p', { class: 'muted' }, 'Sem pontos para a fronteira.')
+  if (all.length === 0) return h('p', { class: 'text-fg-2' }, 'Sem pontos para a fronteira.')
   const xs = all.map(p => p.riskPct)
   const ys = all.map(p => p.returnPct)
   const xr = (Math.max(...xs) - Math.min(...xs) || 1) * 0.08
@@ -231,8 +231,8 @@ export function frontierChart(points: FrontierPoint[], marks: FrontierMark[]): H
 
   return h(
     'figure',
-    { class: 'chart', role: 'group', 'aria-label': 'Fronteira de risco e retorno das carteiras simuladas' },
+    { class: 'relative min-w-0', role: 'group', 'aria-label': 'Fronteira de risco e retorno das carteiras simuladas' },
     svg,
-    h('figcaption', { class: 'legend' }, ...marks.map(m => h('span', { class: 'legend-item' }, h('span', { class: `legend-dot fp-${m.key}` }), m.label)), h('span', { class: 'legend-item' }, h('span', { class: 'legend-dot fp-all' }), 'Carteiras simuladas'))
+    h('figcaption', { class: 'mt-2.5 flex flex-wrap gap-x-[18px] gap-y-2 text-[0.8125rem] text-fg-2' }, ...marks.map(m => h('span', { class: 'inline-flex items-center gap-[7px]' }, h('span', { class: `size-[11px] rounded-full fp-${m.key}` }), m.label)), h('span', { class: 'inline-flex items-center gap-[7px]' }, h('span', { class: 'fp-all size-[11px] rounded-full' }), 'Carteiras simuladas'))
   )
 }
