@@ -51,6 +51,15 @@ cd ../web && bun install && bun dev                  # frontend
 
 Testes (offline, com dados sintéticos): `cd core && bun test`. Os testes do treino em Python: `cd core/training && python3 -m unittest test_splits`.
 
+## Interface
+
+Menu lateral por objetivo (no celular, barra inferior): **Início** (busca, watchlist com cotação e status das integrações), **Analisar ativo**, **Radar B3**, **Monte Carlo**, **Pesquisa quant** (fatores, backtest, carteira robusta, IPS e diário), **Notícias & papers**, **Treino de decisão** e **Alertas & Telegram**.
+
+- `Ctrl/⌘ K` (ou `/`) abre a busca rápida: digite um ticker (`petr4` vira `PETR4.SA`) ou o nome de uma ferramenta.
+- Cada tela tem URL própria e compartilhável (`#/analisar/PETR4.SA`, `#/noticias/VALE3.SA`, `#/quant/backtest`, `#/alertas?ticker=PETR4`); voltar/avançar do navegador funciona.
+- Tema claro/escuro (segue o sistema até você escolher), navegação por teclado e leitores de tela.
+- O aviso de que o projeto é educacional e não é recomendação de investimento fica fixo em todas as telas.
+
 ## Endpoints
 
 | Endpoint | O que entrega |

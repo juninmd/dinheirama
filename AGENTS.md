@@ -15,7 +15,12 @@ dinheirama/
     index.ts            # API Hono, radar, análise, Monte Carlo, alertas
     quant/              # camada quantitativa (fatores, backtest, carteira, estresse, IPS, diário, guarda do LLM)
     training/           # coleta de dados e treino (splits.py = divisão temporal com purga)
-  web/                  # frontend
+  web/                  # frontend (hash router; uma view por tela)
+    src/main.ts         # shell: menu, barra superior, busca rápida (ui/palette.ts), roteamento
+    src/views/          # telas: home, analyze, radar, montecarlo, news, training, alerts, quant (lazy)
+    src/ui/             # componentes (components.ts), gráficos SVG (charts.ts), ícones, toast, diálogo
+    src/styles/         # tokens.css (temas), base, shell, components, views; quant.css só carrega com a aba
+    src/research-*.ts   # abas da pesquisa quant (DOM sempre via h()/textContent, nunca innerHTML com dado da API)
   docs/METODOLOGIA.md   # metodologia, premissas e limitações
   .github/              # workflows
 ```
