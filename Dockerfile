@@ -1,8 +1,8 @@
 # Build Frontend
-FROM oven/bun:latest AS web-builder
+FROM oven/bun:1-slim AS web-builder
 WORKDIR /app
 COPY web/package.json web/bun.lock ./
-RUN bun install
+RUN bun install --frozen-lockfile
 COPY web/ .
 RUN bun run build
 
@@ -28,20 +28,22 @@ VOLUME ["/data/training", "/data/models"]
 ENTRYPOINT ["python3", "training/trainer.py"]
 
 # Final Stage - Run Backend
-FROM oven/bun:latest
+FROM oven/bun:1-slim
 WORKDIR /app
 
-# Copy backend source and dependencies
-COPY core/package.json core/bun.lock ./
-RUN bun install
-COPY core/ .
-
-# Copy frontend build results
-COPY --from=web-builder /app/dist ./public
-
-# Install Python for training subprocess (optional)
+# Python para o subprocesso de treino (opcional). Fica antes do código para o layer ser reaproveitado do cache.
 RUN apt-get update && apt-get install -y --no-install-recommends python3 && \
     rm -rf /var/lib/apt/lists/*
+
+# Dependências de produção primeiro: só reinstalam quando package.json/bun.lock mudam
+COPY core/package.json core/bun.lock ./
+# sem --frozen-lockfile: o core/bun.lock atual referencia `ollama` sem entrada de pacote e o modo congelado falha
+RUN bun install --production
+
+COPY core/ .
+
+# Frontend já vem pré-comprimido (.br/.gz) pelo build e é servido sem custo de CPU
+COPY --from=web-builder /app/dist ./public
 
 EXPOSE 3000
 CMD ["bun", "index.ts"]

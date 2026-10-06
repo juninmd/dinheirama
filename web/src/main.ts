@@ -1,5 +1,5 @@
 import './style.css'
-import { initResearch, type ResearchHandle } from './research'
+import type { ResearchHandle } from './research'
 
 interface Toast {
   id: string
@@ -1073,14 +1073,27 @@ alertsBtn.addEventListener('click', () => {
 })
 
 let research: ResearchHandle | null = null
+let researchLoading: Promise<void> | null = null
 
-quantBtn.addEventListener('click', () => {
+// O módulo de pesquisa quantitativa (~70% do JS) é carregado sob demanda, na primeira abertura da aba.
+const preloadResearch = () => { void import('./research') }
+quantBtn.addEventListener('pointerenter', preloadResearch, { once: true })
+quantBtn.addEventListener('focus', preloadResearch, { once: true })
+
+quantBtn.addEventListener('click', async () => {
   hideAllResults()
   quantResultDiv.classList.remove('hidden')
-  // monta as sub-abas (e busca dados) só na primeira abertura
-  if (research) research.show()
-  else research = initResearch($<HTMLDivElement>('quant-root'))
   quantResultDiv.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  // monta as sub-abas (e busca dados) só na primeira abertura
+  if (research) {
+    research.show()
+    return
+  }
+  researchLoading ??= import('./research')
+    .then(({ initResearch }) => { research ??= initResearch($<HTMLDivElement>('quant-root')) })
+    .catch(() => { showToast('Não foi possível carregar a pesquisa quantitativa. Tente novamente.', 'error') })
+    .finally(() => { researchLoading = null })
+  await researchLoading
 })
 
 createAlertForm.addEventListener('submit', async (e) => {
