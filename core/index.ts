@@ -2,8 +2,10 @@ import { Hono } from 'hono'
 import { serveStatic } from 'hono/bun'
 import { cors } from 'hono/cors'
 import { z } from 'zod'
+import { compress } from 'hono/compress'
 import YahooFinance from 'yahoo-finance2'
 const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] })
+import { CacheManager, mapPool } from './cache.ts'
 import { createLlm, llmConfigFromEnv } from './llm'
 import { initModel, predict, reloadModel, isModelLoaded } from './training/serve'
 import type { FeatureVector, ModelPrediction } from './training/serve'
@@ -33,50 +35,16 @@ const app = new Hono()
 
 const tickerSchema = z.string().regex(/^[A-Z0-9]{4,6}\.[A-Z]{2}$/, 'Invalid B3 ticker format (ex: PETR4.SA)')
 
-interface CacheEntry<T> {
-  data: T
-  timestamp: number
-}
-
-class CacheManager {
-  private readonly cache = new Map<string, CacheEntry<unknown>>()
-  private readonly ttl: number
-
-  constructor(ttlMinutes = 5) {
-    this.ttl = ttlMinutes * 60 * 1000
-  }
-
-  get<T>(key: string): T | null {
-    const entry = this.cache.get(key)
-    if (!entry) return null
-    if (Date.now() - entry.timestamp > this.ttl) {
-      this.cache.delete(key)
-      return null
-    }
-    return entry.data as T
-  }
-
-  set<T>(key: string, data: T): void {
-    this.cache.set(key, { data, timestamp: Date.now() })
-  }
-
-  has(key: string): boolean {
-    return this.get<unknown>(key) !== null
-  }
-
-  invalidate(key: string): void {
-    this.cache.delete(key)
-  }
-
-  clear(): void {
-    this.cache.clear()
-  }
-}
-
 const quoteCache = new CacheManager(5)
 const chartCache = new CacheManager(10)
 const signalCache = new CacheManager(30)
 const seriesCache = new CacheManager(180)
+/** Cotações recentes (em lote) usadas pelos snapshots: o Yahoo atrasa B3 em ~15 min, então 30 s bastam e ficam abaixo do ciclo de 60 s dos alertas. */
+const liveQuoteCache = new CacheManager(0.5, 200)
+/** Barras diárias de 1 ano por ticker: uma só chamada alimenta RSI/variação 30d e o Monte Carlo. */
+const barsCache = new CacheManager(15, 200)
+const snapshotCache = new CacheManager(0.5, 200)
+const portfolioCache = new CacheManager(2, 4)
 
 type AssetClass = 'stock'
 type SuggestedAction = 'buy' | 'hold' | 'sell'
@@ -263,13 +231,28 @@ async function fetchWithRetry<T>(
 }
 
 app.use('*', cors())
-app.use('/*', serveStatic({ root: './public' }))
-// Fallback SPA: só para rotas de UI. Sem o guarda, ele responde index.html
-// antes de qualquer rota GET da API (/health, /api/*).
-app.get('*', async (c, next) => {
-  if (c.req.path === '/health' || c.req.path.startsWith('/api/')) return next()
-  return serveStatic({ path: './public/index.html' })(c, next)
+// JSON da API é verboso e muito compressível; estáticos já saem pré-comprimidos (precompressed).
+app.use('/api/*', compress())
+
+const isApiPath = (path: string) => path === '/health' || path.startsWith('/api/')
+
+// Assets do Vite têm hash no nome: cache imutável. O resto (index.html etc.) revalida sempre.
+const staticFiles = serveStatic({
+  root: './public',
+  precompressed: true,
+  onFound: (filePath, c) => {
+    c.header('Cache-Control', filePath.includes('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache')
+  },
 })
+const spaIndex = serveStatic({
+  path: './public/index.html',
+  precompressed: true,
+  onFound: (_path, c) => { c.header('Cache-Control', 'no-cache') },
+})
+// Estáticos só para rotas de UI: evita um stat de arquivo em toda chamada de API.
+app.use('*', (c, next) => (isApiPath(c.req.path) ? next() : staticFiles(c, next)))
+// Fallback SPA: sem o guarda, ele responderia index.html antes de qualquer rota GET da API.
+app.get('*', (c, next) => (isApiPath(c.req.path) ? next() : spaIndex(c, next)))
 
 app.get('/', (c) => {
   return c.text('B3 Stock Analyzer API')
@@ -280,8 +263,8 @@ app.get('/health', (c) => {
     status: 'healthy',
     timestamp: new Date().toISOString(),
     cache: {
-      quoteCacheSize: quoteCache['cache']?.size ?? 0,
-      chartCacheSize: chartCache['cache']?.size ?? 0
+      quoteCacheSize: quoteCache.size,
+      chartCacheSize: chartCache.size
     }
   })
 })
@@ -299,22 +282,17 @@ app.get('/api/quote/:ticker', async (c) => {
     return c.json({ error: 'Invalid ticker format', code: 'INVALID_TICKER' }, 400)
   }
 
-  const cacheKey = `quote:${ticker}`
-  const cached = quoteCache.get<unknown>(cacheKey)
-  if (cached) {
-    log('info', `Cache hit for ${ticker}`)
-    return c.json({ ...cached as object, cached: true })
-  }
-
   try {
-    const quote = await fetchWithRetry(() => yahooFinance.quote(ticker), 2, 500) as Record<string, any>
+    const { value: quote, cached } = await quoteCache.getOrLoad(`quote:${ticker}`, async () => {
+      const result = await fetchWithRetry(() => yahooFinance.quote(ticker), 2, 500) as Record<string, any>
+      return !result || result.regularMarketPrice === undefined ? null : result
+    })
 
-    if (!quote || quote.regularMarketPrice === undefined) {
+    if (!quote) {
       return c.json({ error: 'Ticker not found', code: 'NOT_FOUND' }, 404)
     }
 
-    quoteCache.set(cacheKey, quote)
-    return c.json(quote)
+    return c.json(cached ? { ...quote, cached: true } : quote)
   } catch (error: any) {
     log('error', `Failed to fetch quote for ${ticker}`, { error: error.message })
     return c.json({ error: 'Failed to fetch quote', code: 'QUOTE_ERROR' }, 500)
@@ -329,20 +307,13 @@ app.get('/api/history/:ticker', async (c) => {
     return c.json({ error: 'Invalid ticker format', code: 'INVALID_TICKER' }, 400)
   }
 
-  const cacheKey = `history:${ticker}`
-  const cached = chartCache.get<unknown>(cacheKey)
-  if (cached) {
-    return c.json({ ...cached as object, cached: true })
-  }
-
   try {
-    const result = await fetchWithRetry(
-      () => yahooFinance.historical(ticker, { period1: '2023-01-01' }),
-      2,
-      500
+    const { value, cached } = await chartCache.getOrLoad(`history:${ticker}`, () =>
+      fetchWithRetry(() => yahooFinance.historical(ticker, { period1: '2023-01-01' }), 2, 500)
     )
-    chartCache.set(cacheKey, result)
-    return c.json(result)
+    // histórico é um array: espalhá-lo num objeto (como antes) quebrava o formato no cache hit
+    c.header('X-Cache', cached ? 'HIT' : 'MISS')
+    return c.json(value)
   } catch (error: any) {
     log('error', `Failed to fetch history for ${ticker}`, { error: error.message })
     return c.json({ error: 'Failed to fetch history', code: 'HISTORY_ERROR' }, 500)
@@ -465,31 +436,82 @@ app.post('/api/analyze', async (c) => {
 })
 
 const CONCURRENCY_LIMIT = 5
+const MC_LOOKBACK_DAYS = Number(process.env.MC_LOOKBACK_DAYS ?? 365)
+const BARS_LOOKBACK_DAYS = Math.max(MC_LOOKBACK_DAYS, 90)
 
-export async function buildAssetSnapshot(asset: MarketAsset): Promise<AssetSnapshot | null> {
+interface DailyBar {
+  /** epoch ms (UTC) do pregão */
+  t: number
+  close: number | null
+  volume: number | null
+}
+
+const isoDay = (ms: number) => new Date(ms).toISOString().split('T')[0]!
+
+/** Barras diárias (cache de 15 min, uma chamada por ticker): alimenta RSI, variação 30d, /api/predict e Monte Carlo. */
+async function fetchBars(ticker: string): Promise<DailyBar[]> {
+  const { value } = await barsCache.getOrLoad(`bars:${ticker}`, async () => {
+    const period1 = isoDay(Date.now() - BARS_LOOKBACK_DAYS * 864e5)
+    const chart = await fetchWithTimeout(
+      fetchWithRetry(() => yahooFinance.chart(ticker, { period1 }), 1, 500),
+      12000
+    )
+    const bars: DailyBar[] = ((chart?.quotes as any[]) || []).map(quote => ({
+      t: new Date(quote?.date).getTime(),
+      close: typeof quote?.close === 'number' ? quote.close : null,
+      volume: typeof quote?.volume === 'number' ? quote.volume : null,
+    }))
+    return bars.length > 0 ? bars : null
+  })
+  return value ?? []
+}
+
+/** Fatia das barras a partir de `days` dias atrás (mesmo corte de data que o `period1` usado antes). */
+function barsSince(bars: DailyBar[], days: number): DailyBar[] {
+  const cutoff = Date.parse(isoDay(Date.now() - days * 864e5))
+  return bars.filter(bar => bar.t >= cutoff)
+}
+
+/** Cotação recente (cache de 30 s, deduplicada); `null` se o ticker não existe. */
+async function fetchLiveQuote(ticker: string): Promise<any | null> {
+  const { value } = await liveQuoteCache.getOrLoad(`q:${ticker}`, async () => {
+    const quote = await fetchWithTimeout(fetchWithRetry(() => yahooFinance.quote(ticker), 2, 500), 10000) as any
+    return !quote || quote.regularMarketPrice === undefined ? null : quote
+  })
+  return value
+}
+
+/** Pré-carrega as cotações de vários tickers numa única chamada ao Yahoo; falha aqui só desfaz o ganho. */
+async function prefetchQuotes(tickers: string[]): Promise<void> {
+  const missing = tickers.filter(ticker => !liveQuoteCache.has(`q:${ticker}`))
+  if (missing.length < 2) return
   try {
-    const quote = await fetchWithTimeout(
-      fetchWithRetry(() => yahooFinance.quote(asset.ticker), 2, 500),
-      10000
-    ) as any
-
-    if (!quote || quote.regularMarketPrice === undefined) {
-      return null
+    const quotes = await fetchWithTimeout(fetchWithRetry(() => yahooFinance.quote(missing), 1, 500), 15000) as any[]
+    for (const quote of quotes ?? []) {
+      if (quote?.symbol && quote.regularMarketPrice !== undefined) liveQuoteCache.set(`q:${quote.symbol}`, quote)
     }
+  } catch (error: any) {
+    log('warn', 'Batch quote prefetch failed; falling back to per-ticker quotes', { error: error.message })
+  }
+}
 
-    const date = new Date()
-    date.setDate(date.getDate() - 30)
-    const period1Str = date.toISOString().split('T')[0]!
+/** Snapshot com cache curto e deduplicação: portfólio, alertas e /api/analyze compartilham o mesmo trabalho. */
+export async function buildAssetSnapshot(asset: MarketAsset): Promise<AssetSnapshot | null> {
+  const { value } = await snapshotCache.getOrLoad(`snap:${asset.ticker}`, () => computeAssetSnapshot(asset))
+  // o nome vem do chamador (universo, ticker puro nos alertas, texto livre no /analyze)
+  return value && value.name !== asset.name ? { ...value, name: asset.name } : value
+}
+
+async function computeAssetSnapshot(asset: MarketAsset): Promise<AssetSnapshot | null> {
+  try {
+    const quote = await fetchLiveQuote(asset.ticker)
+    if (!quote) return null
 
     let historyChange = 0
     let rsi: number | null = null
 
     try {
-      const chart = await fetchWithTimeout(
-        fetchWithRetry(() => yahooFinance.chart(asset.ticker, { period1: period1Str }), 1, 500),
-        10000
-      )
-      const history = chart?.quotes ? (chart.quotes as any[]) : []
+      const history = barsSince(await fetchBars(asset.ticker), 30)
 
       if (history.length > 0) {
         const pastPrice = history[0]?.close
@@ -574,25 +596,18 @@ async function applyFactorModel(snapshot: AssetSnapshot): Promise<AssetSnapshot>
   }
 }
 
-async function chunkedPromiseAll<T, R>(
-  items: T[],
-  fn: (item: T) => Promise<R>,
-  concurrency = CONCURRENCY_LIMIT
-): Promise<R[]> {
-  const results: R[] = []
-  for (let i = 0; i < items.length; i += concurrency) {
-    const chunk = items.slice(i, i + concurrency)
-    const chunkResults = await Promise.all(chunk.map(fn))
-    results.push(...chunkResults)
-  }
-  return results
+/** Radar completo, com cache de 2 min e uma única geração por vez (inclui LLM e Monte Carlo, que são caros). */
+export async function buildPortfolio(): ReturnType<typeof computePortfolio> {
+  const { value } = await portfolioCache.getOrLoad('portfolio', computePortfolio)
+  return value
 }
 
-export async function buildPortfolio() {
+async function computePortfolio() {
   log('info', 'Portfolio generation started')
 
   {
-    const quoteResults = await chunkedPromiseAll(MARKET_UNIVERSE, buildAssetSnapshot, CONCURRENCY_LIMIT)
+    await prefetchQuotes(MARKET_UNIVERSE.map(asset => asset.ticker))
+    const quoteResults = await mapPool(MARKET_UNIVERSE, CONCURRENCY_LIMIT, asset => buildAssetSnapshot(asset))
 
     const quotes = quoteResults.filter((q): q is AssetSnapshot => q !== null)
 
@@ -668,8 +683,6 @@ app.get('/api/portfolio', async (c) => {
   }
 })
 
-const MC_LOOKBACK_DAYS = Number(process.env.MC_LOOKBACK_DAYS ?? 365)
-
 function clampNumber(raw: string | undefined, fallback: number, min: number, max: number): number {
   const value = Number(raw)
   if (!Number.isFinite(value)) return fallback
@@ -685,21 +698,16 @@ function parseMcParams(c: { req: { query: (key: string) => string | undefined } 
   }
 }
 
-/** Série de fechamentos para Monte Carlo (cache de 3h: histórico longo muda pouco). */
+/** Série de fechamentos para Monte Carlo, derivada das barras diárias em cache (sem nova chamada ao Yahoo). */
 async function fetchCloseSeries(ticker: string, lookbackDays = MC_LOOKBACK_DAYS): Promise<AssetSeries | null> {
   const cacheKey = `series:${ticker}:${lookbackDays}`
   const cached = seriesCache.get<AssetSeries>(cacheKey)
   if (cached) return cached
 
   try {
-    const period1 = new Date(Date.now() - lookbackDays * 864e5).toISOString().split('T')[0]!
-    const chart = await fetchWithTimeout(
-      fetchWithRetry(() => yahooFinance.chart(ticker, { period1 }), 1, 500),
-      12000
-    )
-    const closes = ((chart?.quotes as any[]) || [])
-      .map(quote => quote?.close)
-      .filter((close: unknown): close is number => typeof close === 'number' && close > 0)
+    const closes = barsSince(await fetchBars(ticker), lookbackDays)
+      .map(bar => bar.close)
+      .filter((close): close is number => typeof close === 'number' && close > 0)
 
     if (closes.length < 31) return null
 
@@ -716,7 +724,7 @@ async function runMonteCarloPortfolio(
   tickers: string[],
   params: { days: number; sims: number; engine: McEngine }
 ): Promise<McPortfolioResult | null> {
-  const seriesResults = await chunkedPromiseAll(tickers, ticker => fetchCloseSeries(ticker), CONCURRENCY_LIMIT)
+  const seriesResults = await mapPool(tickers, CONCURRENCY_LIMIT, ticker => fetchCloseSeries(ticker))
   const series = seriesResults.filter((item): item is AssetSeries => item !== null)
   if (series.length < 2) return null
   return optimizePortfolio(series, params)
@@ -855,17 +863,16 @@ app.get('/api/predict', async (c) => {
     const ticker = normalizeAsset(c.req.query('ticker') || '')
     if (!ticker) return c.json({ error: 'ticker query param required', code: 'MISSING_TICKER' }, 400)
 
-    const quote = await fetchWithRetry(() => yahooFinance.quote(ticker), 2, 500) as any
+    const quote = await fetchLiveQuote(ticker)
     if (!quote?.regularMarketPrice) return c.json({ error: 'Ticker not found', code: 'NOT_FOUND' }, 404)
 
-    const chart = await yahooFinance.chart(ticker, { period1: new Date(Date.now() - 60 * 864e5).toISOString().split('T')[0] })
-    const history = chart?.quotes || []
+    const history = barsSince(await fetchBars(ticker), 60)
 
     const currentPrice = quote.regularMarketPrice
-    const pastPrice = history[0]?.close
+    const pastPrice = history[0]?.close ?? 0
     const historyChange30d = pastPrice > 0 ? ((currentPrice - pastPrice) / pastPrice) * 100 : 0
-    const avgVolume = history.length > 0 ? history.reduce((s: number, d: any) => s + (d.volume || 0), 0) / history.length : 1
-    const sma50 = history.length >= 50 ? history.slice(-50).reduce((s: number, d: any) => s + d.close, 0) / 50 : null
+    const avgVolume = history.length > 0 ? history.reduce((s, d) => s + (d.volume || 0), 0) / history.length : 1
+    const sma50 = history.length >= 50 ? history.slice(-50).reduce((s, d) => s + (d.close ?? 0), 0) / 50 : null
 
     const features: FeatureVector = {
       rsi: calculateRSI(history),
@@ -897,12 +904,23 @@ app.get('/api/predict', async (c) => {
   }
 })
 
+/** Executa um comando sem bloquear o event loop (spawnSync travava todas as requisições durante o treino). */
+async function runCommand(cmd: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  const proc = Bun.spawn(cmd.split(' '), { cwd: import.meta.dir, stdout: 'pipe', stderr: 'pipe' })
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ])
+  return { stdout, stderr, exitCode }
+}
+
 app.post('/api/training/collect', async (c) => {
   try {
     const cmd = process.env.TRAINING_COLLECT_CMD || 'bun run ./training/collector.ts'
-    const proc = Bun.spawnSync(cmd.split(' '), { cwd: import.meta.dir })
-    const stdout = proc.stdout?.toString() || ''
-    const stderr = proc.stderr?.toString() || ''
+    const proc = await runCommand(cmd)
+    const stdout = proc.stdout
+    const stderr = proc.stderr
     log('info', 'Training collection executed', { stdout, stderr: stderr.slice(0, 200) })
     return c.json({ collected: true, stdout: stdout.slice(0, 500), exitCode: proc.exitCode })
   } catch (error: any) {
@@ -914,9 +932,9 @@ app.post('/api/training/collect', async (c) => {
 app.post('/api/training/retrain', async (c) => {
   try {
     const cmd = process.env.TRAINING_RETRAIN_CMD || 'python3 ./training/trainer.py'
-    const proc = Bun.spawnSync(cmd.split(' '), { cwd: import.meta.dir })
-    const stdout = proc.stdout?.toString() || ''
-    const stderr = proc.stderr?.toString() || ''
+    const proc = await runCommand(cmd)
+    const stdout = proc.stdout
+    const stderr = proc.stderr
     log('info', 'Training retrain executed', { stdout: stdout.slice(0, 300), stderr: stderr.slice(0, 200) })
     reloadModel()
     return c.json({ retrained: true, f1: stdout.match(/F1: ([\d.]+)/)?.[1] || null, exitCode: proc.exitCode })
@@ -1221,7 +1239,7 @@ function buildDefaultPaperFeed(asset: MarketAsset): string {
 }
 
 async function fetchResearchFeed(url: string, source: string, kind: ResearchItem['kind']): Promise<ResearchItem[]> {
-  const res = await fetchWithTimeout(fetch(url), 8000)
+  const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
   if (!res.ok) throw new Error(`${source} status ${res.status}`)
   return parseResearchFeed(await res.text(), source, kind)
 }
@@ -1278,7 +1296,7 @@ async function buildResearchBrief(asset: MarketAsset): Promise<ResearchBrief> {
 }
 
 async function fetchJsonSignals(url: string, source: string): Promise<MarketSignal[]> {
-  const res = await fetchWithTimeout(fetch(url), 5000)
+  const res = await fetch(url, { signal: AbortSignal.timeout(5000) })
   if (!res.ok) throw new Error(`${source} status ${res.status}`)
   const json = await res.json() as any
   const items = Array.isArray(json) ? json : json.results || json.articles || json.data || []
@@ -1291,7 +1309,7 @@ async function fetchJsonSignals(url: string, source: string): Promise<MarketSign
 }
 
 async function fetchTextFeedSignals(url: string, source: string, query: string): Promise<MarketSignal[]> {
-  const res = await fetchWithTimeout(fetch(url), 5000)
+  const res = await fetch(url, { signal: AbortSignal.timeout(5000) })
   if (!res.ok) throw new Error(`${source} status ${res.status}`)
   const text = await res.text()
   const matches = [...text.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>|<title>(.*?)<\/title>/gi)]

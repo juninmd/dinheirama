@@ -10,6 +10,7 @@ import { CostBasisBook, DEFAULT_COST_CONFIG, DEFAULT_TAX_CONFIG, type CostConfig
 import { type BenchmarkRelative, type PerformanceMetrics, benchmarkRelative, computeMetrics, deflatedSharpe, periodSharpe } from './metrics.ts'
 import { type PricePanel, averageDollarVolume, monthStartIndexes } from './panel.ts'
 import { TRADING_DAYS_YEAR, simpleReturns } from './stats.ts'
+import type { PriceFactorValues } from './factors.ts'
 import type { Fundamentals } from './fundamentals.ts'
 import type { Strategy, Weights } from './strategies.ts'
 
@@ -40,6 +41,8 @@ export interface BacktestConfig {
   delistingStaleDays: number
   /** Perda assumida na liquidação forçada de um ativo deslistado (premissa conservadora, sem dados de recuperação). */
   delistingHaircut: number
+  /** Memoização de fatores de preço compartilhada entre execuções SOBRE O MESMO painel (veja StrategyContext). */
+  factorCache?: Map<string, PriceFactorValues>
 }
 
 export const DEFAULT_BACKTEST_CONFIG: BacktestConfig = {
@@ -223,6 +226,7 @@ function simulate(panel: PricePanel, strategy: Strategy, config: BacktestConfig,
         prevWeights,
         riskFree12m: rf12m(rf, signalIndex),
         fundamentalsAt: config.fundamentalsAt,
+        factorCache: config.factorCache,
         isMember: config.universeAt ? (ticker: string) => (config.universeAt as NonNullable<BacktestConfig['universeAt']>)(ticker, panel.dates[signalIndex] as string) : undefined,
       })
 
@@ -354,6 +358,8 @@ export function standardCaveats(config: BacktestConfig, panel: PricePanel): stri
 
 export function runBacktest(panel: PricePanel, strategy: Strategy, partial: Partial<BacktestConfig> = {}): BacktestResult | null {
   const config: BacktestConfig = { ...DEFAULT_BACKTEST_CONFIG, ...partial }
+  // as execuções líquida e bruta (e outras estratégias, via compareStrategies) pedem os mesmos fatores nas mesmas datas
+  config.factorCache ??= new Map()
   // executar no mesmo fechamento do sinal seria look-ahead: o atraso mínimo é de 1 pregão
   config.executionLagDays = Math.max(1, Math.floor(config.executionLagDays))
   const net = simulate(panel, strategy, config, true)
@@ -430,8 +436,9 @@ export function compareStrategies(
   partial: Partial<BacktestConfig> = {},
   extraTrialSharpes: number[] = []
 ): BacktestResult[] {
+  const shared = { ...partial, factorCache: partial.factorCache ?? new Map() }
   const results = strategies
-    .map(s => runBacktest(panel, s, partial))
+    .map(s => runBacktest(panel, s, shared))
     .filter((r): r is BacktestResult => r !== null)
   return attachDeflatedSharpe(results, extraTrialSharpes)
 }
@@ -444,8 +451,9 @@ export async function compareStrategiesAsync(
   extraTrialSharpes: number[] = []
 ): Promise<BacktestResult[]> {
   const results: BacktestResult[] = []
+  const shared = { ...partial, factorCache: partial.factorCache ?? new Map() }
   for (const s of strategies) {
-    const r = runBacktest(panel, s, partial)
+    const r = runBacktest(panel, s, shared)
     if (r) results.push(r)
     await new Promise<void>(resolve => setTimeout(resolve, 0))
   }

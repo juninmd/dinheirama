@@ -1,7 +1,7 @@
 // Estratégias de referência para o backtest. Cada uma decide só com dados até o índice t.
 
 import { type Fundamentals } from './fundamentals.ts'
-import { type FactorInput, MIN_HISTORY_FOR_MOMENTUM, priceFactors, rsi, scoreUniverse } from './factors.ts'
+import { type FactorInput, MIN_HISTORY_FOR_MOMENTUM, type PriceFactorValues, priceFactors, rsi, scoreUniverse } from './factors.ts'
 import { type PricePanel, averageDollarVolume, priceAt } from './panel.ts'
 
 export type Weights = Record<string, number>
@@ -18,6 +18,25 @@ export interface StrategyContext {
   fundamentalsAt?: (ticker: string, date: string, price: number | null) => Fundamentals | null
   /** Pertencimento ao universo na data do sinal (universo histórico). */
   isMember?: (ticker: string) => boolean
+  /**
+   * Memoização de `priceFactors` por (ticker, t), válida só para ESTE painel: a função é pura e a chave inclui t,
+   * então reaproveitar entre estratégias/execuções não introduz look-ahead. Os valores são somente leitura.
+   */
+  factorCache?: Map<string, PriceFactorValues>
+}
+
+/** Fatores de preço de `ticker` em ctx.t, memoizados em ctx.factorCache quando houver. */
+function factorsAt(ctx: StrategyContext, ticker: string): PriceFactorValues {
+  const column = ctx.panel.close[ticker] as Array<number | null>
+  const cache = ctx.factorCache
+  if (!cache) return priceFactors(column, ctx.t)
+  const key = `${ticker}|${ctx.t}`
+  let hit = cache.get(key)
+  if (!hit) {
+    hit = priceFactors(column, ctx.t)
+    cache.set(key, hit)
+  }
+  return hit
 }
 
 export interface Strategy {
@@ -58,7 +77,7 @@ function equalWeights(tickers: string[], slots: number): Weights {
 function factorInputs(ctx: StrategyContext, tickers: string[]): FactorInput[] {
   return tickers.map(ticker => ({
     ticker,
-    price: priceFactors(ctx.panel.close[ticker] as Array<number | null>, ctx.t),
+    price: factorsAt(ctx, ticker),
     fundamentals: ctx.fundamentalsAt ? ctx.fundamentalsAt(ticker, ctx.date, priceAt(ctx.panel, ticker, ctx.t)) : null,
   }))
 }
@@ -89,7 +108,7 @@ export function momentumStrategy(options: MomentumOptions): Strategy {
     label: `Momentum 12-1 top ${options.topN}${options.absolute ? ' + momentum absoluto' : ''}`,
     rebalance: ctx => {
       const ranked = eligibleTickers(ctx, options.filter)
-        .map(ticker => ({ ticker, m: priceFactors(ctx.panel.close[ticker] as Array<number | null>, ctx.t).momentum12_1 }))
+        .map(ticker => ({ ticker, m: factorsAt(ctx, ticker).momentum12_1 }))
         .filter((e): e is { ticker: string; m: number } => e.m !== null)
         .filter(e => !options.absolute || e.m > ctx.riskFree12m)
         .sort((a, b) => b.m - a.m)
@@ -111,7 +130,7 @@ export function lowVolStrategy(options: LowVolOptions): Strategy {
     label: `Baixa volatilidade top ${options.topN}`,
     rebalance: ctx => {
       const ranked = eligibleTickers(ctx, options.filter)
-        .map(ticker => ({ ticker, v: priceFactors(ctx.panel.close[ticker] as Array<number | null>, ctx.t).vol }))
+        .map(ticker => ({ ticker, v: factorsAt(ctx, ticker).vol }))
         .filter((e): e is { ticker: string; v: number } => e.v !== null)
         .sort((a, b) => a.v - b.v)
         .slice(0, options.topN)

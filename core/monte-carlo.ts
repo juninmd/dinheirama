@@ -159,16 +159,108 @@ export function percentile(sorted: ArrayLike<number>, q: number): number {
   return lowValue + (highValue - lowValue) * (pos - low)
 }
 
+/** Média e desvio amostral (n-1), com a mesma ordem de soma de `mean`/`stdDev`. */
+function sampleMoments(values: Float64Array): { avg: number; sd: number } {
+  const n = values.length
+  if (n === 0) return { avg: 0, sd: 0 }
+  let sum = 0
+  for (let i = 0; i < n; i++) sum += values[i] as number
+  const avg = sum / n
+  if (n < 2) return { avg, sd: 0 }
+  let acc = 0
+  for (let i = 0; i < n; i++) acc += ((values[i] as number) - avg) ** 2
+  return { avg, sd: Math.sqrt(acc / (n - 1)) }
+}
+
+/** Quickselect in-place: ao fim, a[k] é o k-ésimo menor e todo a[i > k] >= a[k]. Não use com NaN. */
+function quickselect(a: Float64Array, k: number): void {
+  let lo = 0
+  let hi = a.length - 1
+  while (hi > lo) {
+    const mid = (lo + hi) >>> 1
+    const x = a[lo] as number
+    const y = a[mid] as number
+    const z = a[hi] as number
+    const pivot = x < y ? (y < z ? y : x < z ? z : x) : (x < z ? x : y < z ? z : y)
+    let i = lo
+    let j = hi
+    while (i <= j) {
+      while ((a[i] as number) < pivot) i++
+      while ((a[j] as number) > pivot) j--
+      if (i <= j) {
+        const tmp = a[i] as number
+        a[i] = a[j] as number
+        a[j] = tmp
+        i++
+        j--
+      }
+    }
+    if (k <= j) hi = j
+    else if (k >= i) lo = i
+    else return
+  }
+}
+
+/** Mesmo valor de `percentile(sorted, q)`, sem ordenar: reordena `buf` parcialmente. */
+function percentileSelect(buf: Float64Array, q: number): number {
+  const n = buf.length
+  if (n === 0) return 0
+  if (n === 1) return buf[0] as number
+  const pos = Math.min(Math.max(q, 0), 1) * (n - 1)
+  const low = Math.floor(pos)
+  const high = Math.ceil(pos)
+  quickselect(buf, low)
+  const lowValue = buf[low] as number
+  if (low === high) return lowValue
+  let highValue = buf[high] as number
+  for (let i = high + 1; i < n; i++) if ((buf[i] as number) < highValue) highValue = buf[i] as number
+  return lowValue + (highValue - lowValue) * (pos - low)
+}
+
+const toPct = (value: number) => Math.round(value * 10000) / 100
+
+/** Métricas usadas para ranquear candidatas (sem ordenação completa nem alocação por chamada). */
+interface McScore {
+  meanPct: number
+  stdPct: number
+  sharpe: number
+  cvar95Pct: number
+}
+
+function scoreReturns(terminalReturns: Float64Array, scratch: Float64Array, days: number, riskFreeRate: number): McScore {
+  const { avg, sd } = sampleMoments(terminalReturns)
+  scratch.set(terminalReturns)
+  const var95 = percentileSelect(scratch, 0.05)
+  let tailSum = 0
+  let tailCount = 0
+  for (let i = 0; i < terminalReturns.length; i++) {
+    const value = terminalReturns[i] as number
+    if (value <= var95) {
+      tailSum += value
+      tailCount++
+    }
+  }
+  const cvar95 = tailCount > 0 ? tailSum / tailCount : var95
+  const horizonRiskFree = riskFreeRate * (days / TRADING_DAYS_YEAR)
+  const sharpe = sd > 0 ? ((avg - horizonRiskFree) / sd) * Math.sqrt(TRADING_DAYS_YEAR / days) : 0
+  return {
+    meanPct: toPct(avg),
+    stdPct: toPct(sd),
+    sharpe: Math.round(sharpe * 100) / 100,
+    cvar95Pct: toPct(cvar95),
+  }
+}
+
 function summarize(terminalReturns: Float64Array, days: number, riskFreeRate: number): McDistribution {
-  const sorted = Float64Array.from(terminalReturns).sort()
-  const values = Array.from(terminalReturns)
-  const avg = mean(values)
-  const sd = stdDev(values)
+  const sorted = terminalReturns.slice().sort()
+  const { avg, sd } = sampleMoments(terminalReturns)
+  const count = terminalReturns.length
 
   let profits = 0
   let gains10 = 0
   let losses10 = 0
-  for (const value of values) {
+  for (let i = 0; i < count; i++) {
+    const value = terminalReturns[i] as number
     if (value > 0) profits++
     if (value >= 0.1) gains10++
     if (value <= -0.1) losses10++
@@ -177,7 +269,8 @@ function summarize(terminalReturns: Float64Array, days: number, riskFreeRate: nu
   const var95 = percentile(sorted, 0.05)
   let tailSum = 0
   let tailCount = 0
-  for (const value of values) {
+  for (let i = 0; i < count; i++) {
+    const value = terminalReturns[i] as number
     if (value <= var95) {
       tailSum += value
       tailCount++
@@ -188,23 +281,22 @@ function summarize(terminalReturns: Float64Array, days: number, riskFreeRate: nu
   const horizonRiskFree = riskFreeRate * (days / TRADING_DAYS_YEAR)
   const sharpe = sd > 0 ? ((avg - horizonRiskFree) / sd) * Math.sqrt(TRADING_DAYS_YEAR / days) : 0
 
-  const pct = (value: number) => Math.round(value * 10000) / 100
   return {
-    meanPct: pct(avg),
-    medianPct: pct(percentile(sorted, 0.5)),
-    stdPct: pct(sd),
+    meanPct: toPct(avg),
+    medianPct: toPct(percentile(sorted, 0.5)),
+    stdPct: toPct(sd),
     percentiles: {
-      p5: pct(percentile(sorted, 0.05)),
-      p25: pct(percentile(sorted, 0.25)),
-      p50: pct(percentile(sorted, 0.5)),
-      p75: pct(percentile(sorted, 0.75)),
-      p95: pct(percentile(sorted, 0.95)),
+      p5: toPct(percentile(sorted, 0.05)),
+      p25: toPct(percentile(sorted, 0.25)),
+      p50: toPct(percentile(sorted, 0.5)),
+      p75: toPct(percentile(sorted, 0.75)),
+      p95: toPct(percentile(sorted, 0.95)),
     },
-    probProfit: Math.round((profits / values.length) * 1000) / 1000,
-    probGain10: Math.round((gains10 / values.length) * 1000) / 1000,
-    probLoss10: Math.round((losses10 / values.length) * 1000) / 1000,
-    var95Pct: pct(var95),
-    cvar95Pct: pct(cvar95),
+    probProfit: Math.round((profits / count) * 1000) / 1000,
+    probGain10: Math.round((gains10 / count) * 1000) / 1000,
+    probLoss10: Math.round((losses10 / count) * 1000) / 1000,
+    var95Pct: toPct(var95),
+    cvar95Pct: toPct(cvar95),
     sharpe: Math.round(sharpe * 100) / 100,
   }
 }
@@ -250,7 +342,7 @@ export function simulateAsset(
   }
 
   const distribution = summarize(terminal, days, riskFreeRate)
-  const sortedDrawdowns = Float64Array.from(drawdowns).sort()
+  const sortedDrawdowns = drawdowns.slice().sort()
 
   // Kelly contínuo: f* = mu/sigma^2, limitado a [0, 1] para evitar alavancagem sugerida.
   const kelly = sigma > 0 ? Math.max(0, Math.min(1, mu / (sigma * sigma))) : 0
@@ -330,12 +422,24 @@ function normalizeWeights(raw: number[], maxWeight: number): number[] {
   return weights
 }
 
-function portfolioTerminalReturns(terminalByAsset: Float64Array, sims: number, n: number, weights: number[]): Float64Array {
-  const out = new Float64Array(sims)
+function portfolioTerminalReturns(
+  terminalByAsset: Float64Array,
+  sims: number,
+  n: number,
+  weights: number[],
+  out: Float64Array = new Float64Array(sims)
+): Float64Array {
+  // Carteiras são esparsas: pesos zero não alteram a soma, então só percorremos os ativos escolhidos.
+  const active: number[] = []
+  for (let i = 0; i < n; i++) if ((weights[i] as number) !== 0) active.push(i)
+  const m = active.length
   for (let s = 0; s < sims; s++) {
     let acc = 0
     const base = s * n
-    for (let i = 0; i < n; i++) acc += (weights[i] as number) * (terminalByAsset[base + i] as number)
+    for (let k = 0; k < m; k++) {
+      const i = active[k] as number
+      acc += (weights[i] as number) * (terminalByAsset[base + i] as number)
+    }
     out[s] = acc
   }
   return out
@@ -349,17 +453,21 @@ function portfolioDrawdownP50(
   weights: number[]
 ): number {
   const drawdowns = new Float64Array(sims)
-  const n = weights.length
+  const active: number[] = []
+  for (let i = 0; i < weights.length; i++) if ((weights[i] as number) !== 0) active.push(i)
+  const m = active.length
+  const cumulative = new Float64Array(weights.length)
 
   for (let s = 0; s < sims; s++) {
-    const cumulative = new Float64Array(n)
+    cumulative.fill(0)
     let peak = 0
     let worst = 0
 
     for (let d = 0; d < days; d++) {
       const row = matrix[pathIndexes[s * days + d] as number] as number[]
       let value = 0
-      for (let i = 0; i < n; i++) {
+      for (let k = 0; k < m; k++) {
+        const i = active[k] as number
         cumulative[i] = (cumulative[i] as number) + (row[i] as number)
         value += (weights[i] as number) * Math.expm1(cumulative[i] as number)
       }
@@ -370,7 +478,7 @@ function portfolioDrawdownP50(
     drawdowns[s] = worst
   }
 
-  return Math.round(percentile(Float64Array.from(drawdowns).sort(), 0.5) * 10000) / 100
+  return Math.round(percentile(drawdowns.slice().sort(), 0.5) * 10000) / 100
 }
 
 /** Desloca cada coluna para a média encolhida (James-Stein), preservando a variância e a correlação. */
@@ -439,9 +547,11 @@ export function optimizePortfolio(
     for (let i = 0; i < n; i++) terminalByAsset[s * n + i] = Math.expm1(cumulative[i] as number)
   }
 
+  const returnsBuffer = new Float64Array(sims)
+  const scratch = new Float64Array(sims)
   const evaluate = (weights: number[]) => ({
     weights,
-    distribution: summarize(portfolioTerminalReturns(terminalByAsset, sims, n, weights), days, riskFreeRate),
+    score: scoreReturns(portfolioTerminalReturns(terminalByAsset, sims, n, weights, returnsBuffer), scratch, days, riskFreeRate),
   })
 
   const equalWeight = Array.from({ length: n }, () => 1 / n)
@@ -460,16 +570,26 @@ export function optimizePortfolio(
     pool.push(evaluate(normalizeWeights(raw, maxWeight)))
   }
 
-  const pickBest = (score: (item: (typeof pool)[number]) => number) =>
-    pool.reduce((best, item) => (score(item) > score(best) ? item : best), pool[0] as (typeof pool)[number])
+  const pickBest = (score: (item: (typeof pool)[number]) => number) => {
+    let best = pool[0] as (typeof pool)[number]
+    let bestScore = score(best)
+    for (let i = 1; i < pool.length; i++) {
+      const item = pool[i] as (typeof pool)[number]
+      const value = score(item)
+      if (value > bestScore) {
+        best = item
+        bestScore = value
+      }
+    }
+    return best
+  }
 
-  const bySharpe = pickBest(item => item.distribution.sharpe)
-  const byDefensive = pickBest(item => item.distribution.cvar95Pct + item.distribution.meanPct * 0.25)
+  const bySharpe = pickBest(item => item.score.sharpe)
+  const byDefensive = pickBest(item => item.score.cvar95Pct + item.score.meanPct * 0.25)
   const aggressiveScore = (item: (typeof pool)[number]) =>
-    item.distribution.cvar95Pct / 100 < cvarFloor ? -Infinity : item.distribution.meanPct
-  const byAggressive = aggressiveScore(pickBest(aggressiveScore)) === -Infinity
-    ? bySharpe
-    : pickBest(aggressiveScore)
+    item.score.cvar95Pct / 100 < cvarFloor ? -Infinity : item.score.meanPct
+  const aggressivePick = pickBest(aggressiveScore)
+  const byAggressive = aggressiveScore(aggressivePick) === -Infinity ? bySharpe : aggressivePick
 
   const toCandidate = (label: string, item: (typeof pool)[number]): McCandidate => ({
     label,
@@ -477,15 +597,15 @@ export function optimizePortfolio(
       .map((weight, i) => ({ ticker: tickers[i] as string, weight: Math.round(weight * 1000) / 1000 }))
       .filter(allocation => allocation.weight >= 0.01)
       .sort((a, b) => b.weight - a.weight),
-    distribution: item.distribution,
+    distribution: summarize(portfolioTerminalReturns(terminalByAsset, sims, n, item.weights), days, riskFreeRate),
     maxDrawdownP50Pct: portfolioDrawdownP50(matrix, pathIndexes, sims, days, item.weights),
   })
 
   const frontier = pool
     .map(item => ({
-      riskPct: item.distribution.stdPct,
-      returnPct: item.distribution.meanPct,
-      sharpe: item.distribution.sharpe,
+      riskPct: item.score.stdPct,
+      returnPct: item.score.meanPct,
+      sharpe: item.score.sharpe,
     }))
     .sort((a, b) => a.riskPct - b.riskPct)
     .filter((_, index, all) => index % Math.max(1, Math.floor(all.length / 40)) === 0)
