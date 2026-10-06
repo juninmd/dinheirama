@@ -1,5 +1,6 @@
 import * as fs from 'fs'
 import * as path from 'path'
+import { mapPool } from './cache.ts'
 import { sendTelegram } from './telegram-daily.ts'
 
 export interface Alert {
@@ -169,8 +170,8 @@ export async function checkAlertsOnce(
   const uniqueTickers = Array.from(new Set(activeAlerts.map(a => a.ticker)))
   const snapshots = new Map<string, any>()
 
-  // Load snapshots for unique tickers
-  for (const ticker of uniqueTickers) {
+  // Load snapshots for unique tickers (em paralelo limitado: um ticker lento não atrasa os demais)
+  await mapPool(uniqueTickers, 4, async ticker => {
     try {
       const assetClass = ticker.endsWith('-USD') ? 'crypto' as const : 'stock' as const
       const snapshot = await buildAssetSnapshotFn({
@@ -185,7 +186,7 @@ export async function checkAlertsOnce(
     } catch (err: any) {
       console.error(`[alerts] Failed to build snapshot for alert check of ${ticker}:`, err.message)
     }
-  }
+  })
 
   // Evaluate alerts
   let stateChanged = false

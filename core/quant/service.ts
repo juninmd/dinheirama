@@ -260,6 +260,8 @@ export function createQuantService(deps: QuantDeps) {
 
     const config: Partial<BacktestConfig> = {
       initialCapital: params.initialCapital,
+      // variantes e estratégias padrão rodam sobre o MESMO painel: os fatores de preço são calculados uma vez
+      factorCache: new Map(),
       ...(pit ? { fundamentalsAt: (tk: string, date: string, price: number | null) => pit.asOf(tk, date, price) } : {}),
       ...(history ? { universeAt: (tk: string, date: string) => history.isMember(tk, date) } : {}),
       riskFreeAnnual,
