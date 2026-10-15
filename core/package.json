@@ -19,10 +19,10 @@
   },
   "dependencies": {
     "@hono/zod-validator": "^0.9.1",
-    "hono": "^4.13.8",
+    "hono": "^4.13.13",
     "ollama": "^0.6.3",
     "tough-cookie": "^6.0.2",
-    "yahoo-finance2": "^4.0.2",
-    "zod": "^4.6.5"
+    "yahoo-finance2": "^4.0.4",
+    "zod": "^4.6.7"
   }
 }
