@@ -22,7 +22,8 @@
     "hono": "^4.13.13",
     "ollama": "^0.6.3",
     "tough-cookie": "^6.0.2",
-    "yahoo-finance2": "^4.0.4",
+    "xgboost": "^1.1.0",
+    "yahoo-finance2": "^4.0.5",
     "zod": "^4.6.7"
   }
 }
