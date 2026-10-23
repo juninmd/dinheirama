@@ -1,40 +1,72 @@
 # AGENTS.md
 
-Projeto pessoal e educacional de pesquisa quantitativa para ações da B3. **Nada aqui é recomendação de investimento** — mantenha esse aviso em README, textos de UI, Telegram e respostas de IA.
+Guia para agentes (e pessoas) que alteram este repositório.
 
-## Tech Stack
-- **Backend:** Bun + Hono + TypeScript (`core/`), dados via Yahoo Finance e BCB
-- **Frontend:** Vite + TypeScript vanilla + Tailwind CSS v4 (`web/`)
-- **Treino (opcional):** Python/XGBoost (`core/training/`)
-- **Deploy:** Docker + ArgoCD (GitOps) em K3s; CI/CD no GitHub Actions
+## Regra zero
 
-## Project Structure
+Projeto pessoal e educacional de pesquisa quantitativa para ações da B3. **Nada aqui é recomendação de investimento.** Mantenha esse aviso no README, na UI (fixo em todas as telas), no Telegram e em qualquer texto gerado por IA. Nunca escreva copy que prometa retorno, diga "compre/venda" ou trate score como previsão.
+
+## Stack
+
+| Camada | Tecnologia |
+|---|---|
+| Backend (`core/`) | Bun + Hono + TypeScript; dados do Yahoo Finance, BCB e CVM |
+| Frontend (`web/`) | Vite + TypeScript vanilla + Tailwind CSS v4, sem framework |
+| Treino (`core/training/`) | Python + XGBoost, opcional |
+| Deploy | Docker + ArgoCD (GitOps) em K3s; CI no GitHub Actions |
+
+## Mapa do repositório
+
 ```
-dinheirama/
-  core/
-    index.ts            # API Hono, radar, análise, Monte Carlo, alertas
-    quant/              # camada quantitativa (fatores, backtest, carteira, estresse, IPS, diário, guarda do LLM)
-    training/           # coleta de dados e treino (splits.py = divisão temporal com purga)
-  web/                  # frontend (hash router; uma view por tela)
-    src/main.ts         # shell: menu, barra superior, busca rápida (ui/palette.ts), roteamento
-    src/views/          # telas: home, analyze, radar, montecarlo, news, training, alerts, quant (lazy)
-    src/ui/             # componentes (components.ts), gráficos SVG (charts.ts), ícones, toast, diálogo
-    src/styles/         # app.css (entrada do Tailwind), theme.css (tokens claro/escuro + @theme), base, components (@apply), visuals (SVG/gráficos); quant.css só carrega com a aba
-    src/research-*.ts   # abas da pesquisa quant (DOM sempre via h()/textContent, nunca innerHTML com dado da API)
-  docs/METODOLOGIA.md   # metodologia, premissas e limitações
-  .github/              # workflows
+core/
+  index.ts          API Hono: radar, análise, Monte Carlo, alertas
+  quant/            fatores, backtest, carteira, estresse, IPS, diário, guarda do LLM
+  training/         coleta e treino (splits.py = divisão temporal com purga)
+web/src/
+  main.ts           shell: menu, barra superior, roteamento por hash
+  views/            uma view por tela (home, analyze, radar, montecarlo, news, training, alerts, quant)
+  ui/               componentes, gráficos SVG, ícones, toast, diálogo, paleta de busca
+  styles/           app.css (entrada), theme.css (tokens), base, components, visuals, quant
+  research-*.ts     abas da pesquisa quant
+docs/METODOLOGIA.md metodologia, premissas e limitações
 ```
 
-## Commands
-- `cd core && bun install && bun test` — testes (offline, dados sintéticos em `quant/test-helpers.ts`)
-- `cd core && bun run start` — backend em :3000
-- `cd web && bun install && bun run build` — build do frontend
-- `cd core/training && python3 -m unittest test_splits` — testes do split temporal
+## Comandos
 
-## Conventions
-- CSS: Tailwind v4. Layout e espaçamento em utilitários no próprio markup; só o que se repete vira classe em `styles/components.css`. Cores/raios/sombras vêm do tema (`bg-surface`, `text-fg-2`, `border-line`…), nunca hex solto. O Tailwind só gera classes escritas por extenso no código: nada de `` `text-${tone}` `` — use os mapas (`TEXT_TONE`, `BG_TONE`) de `ui/format.ts`.
-- GitOps com ArgoCD; infraestrutura declarativa.
-- Regras da camada quant: sem look-ahead (sinal em `t`, execução em `t+1`), fundamentos só ponto-no-tempo em backtest, pesos não ajustados ao passado, dado ausente nunca vira zero, resultados sempre com custos/IR e ressalvas.
-- O motor de fatores (`quant/factors.ts`) é compartilhado entre backtest e score ao vivo; não duplique a lógica.
-- Mudanças em estratégias/fatores precisam de teste que prove ausência de look-ahead (veja `quant/backtest.test.ts`).
-- Não versione `.env`; use `.env.example` como contrato.
+```bash
+cd core && bun install && bun test       # testes offline (dados sintéticos em quant/test-helpers.ts)
+cd core && bun run start                 # API em :3000
+cd web && bun install && bun run build   # build do frontend (bun dev para desenvolver)
+cd core/training && python3 -m unittest test_splits
+```
+
+Rode os testes do pacote que você tocou antes de commitar.
+
+## Regras da camada quant
+
+- Sem look-ahead: sinal em `t`, execução em `t+1`.
+- Fundamentos só ponto-no-tempo em backtest (`availableAt <= data`).
+- Pesos de fatores não são ajustados ao passado.
+- Dado ausente nunca vira zero: reduz cobertura ou responde 503.
+- Todo resultado mostra custos, IR e ressalvas.
+- `quant/factors.ts` é compartilhado entre backtest e score ao vivo. Não duplique a lógica.
+- Mudança em estratégia ou fator precisa de teste que prove ausência de look-ahead (modelo: `quant/backtest.test.ts`).
+- A IA só explica números já calculados; `quant/llm-guard.ts` descarta resposta com número inventado ou promessa.
+
+## Regras de frontend
+
+- **CSS:** Tailwind v4. Layout e espaçamento em utilitários no markup; só o que se repete vira classe em `styles/components.css`.
+- **Tokens:** cores, raios e sombras vêm do tema (`bg-surface`, `text-fg-2`, `border-line`…). Nada de hex solto. Tema claro e escuro definidos em `styles/theme.css`.
+- **Classes dinâmicas:** o Tailwind só gera classes escritas por extenso. Proibido `` `text-${tone}` ``; use os mapas `TEXT_TONE` e `BG_TONE` de `ui/format.ts`.
+- **DOM seguro:** dado vindo da API entra por `h()`/`textContent`, nunca por `innerHTML`.
+- **Cor nunca é o único sinal:** acompanhe de ícone, sinal (+/−) ou texto.
+- **Acessibilidade:** foco visível, navegação por teclado, contraste mínimo 4.5:1, `prefers-reduced-motion` respeitado.
+- **Rotas:** cada tela tem URL de hash própria e compartilhável (`#/analisar/PETR4.SA`).
+- **Mobile primeiro:** barra inferior até 720px, trilho de ícones até 1100px, menu completo acima disso.
+
+## Operação
+
+- Infraestrutura declarativa e GitOps com ArgoCD; não aplique mudanças à mão no cluster.
+- Não versione `.env`. `.env.example` é o contrato de configuração; em produção injete segredos via Secrets/ArgoCD.
+- Não deixe arquivos de marcação ou lixo de automação na raiz (por exemplo `.jules-verified*`).
+- Commits pequenos, mensagem no imperativo, e documentação atualizada junto com a mudança (README e `docs/METODOLOGIA.md`).
