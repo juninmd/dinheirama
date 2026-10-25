@@ -1,4 +1,4 @@
-﻿name: Validate
+name: Validate
 
 on:
   pull_request:
@@ -9,8 +9,12 @@ concurrency:
   group: validate-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   check:
+    runs-on: ubuntu-latest
     steps:
-    - name: Skip validation
-      run: echo "Validation skipped for CI"
+      - name: Skip validation
+        run: echo "Validation skipped for CI"
