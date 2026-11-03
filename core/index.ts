@@ -6,6 +6,7 @@ import { compress } from 'hono/compress'
 import YahooFinance from 'yahoo-finance2'
 const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] })
 import { CacheManager, mapPool } from './cache.ts'
+import { createBrapiQuoteSource } from './brapi.ts'
 import { createLlm, llmConfigFromEnv } from './llm'
 import { initModel, predict, reloadModel, isModelLoaded } from './training/serve'
 import type { FeatureVector, ModelPrediction } from './training/serve'
@@ -38,6 +39,9 @@ const app = new Hono()
 app.use('/api/*', compress())
 
 const tickerSchema = z.string().regex(/^[A-Z0-9]{4,6}\.[A-Z]{2}$/, 'Invalid B3 ticker format (ex: PETR4.SA)')
+
+/** Fallback opcional de cotações da B3 (brapi.dev): só entra quando o Yahoo falha. */
+const brapiQuote = createBrapiQuoteSource({ token: process.env.BRAPI_TOKEN, onError: message => log('warn', message) })
 
 const quoteCache = new CacheManager(5)
 const chartCache = new CacheManager(10)
@@ -235,6 +239,21 @@ async function fetchWithRetry<T>(
   throw lastError
 }
 
+/**
+ * Cotação com fallback: o Yahoo é a fonte primária e o brapi cobre a queda dele (rate limit,
+ * 401, resposta sem preço). Moeda estrangeira e cripto ficam só no Yahoo, porque o brapi não as cobre.
+ */
+async function fetchQuoteWithFallback(ticker: string): Promise<Record<string, any> | null> {
+  try {
+    const quote = await fetchWithTimeout(fetchWithRetry(() => yahooFinance.quote(ticker), 2, 500), 10000) as Record<string, any> | undefined
+    if (quote && quote.regularMarketPrice !== undefined) return quote
+    log('warn', `Yahoo sem preço para ${ticker}; tentando brapi`)
+  } catch (error: any) {
+    log('warn', `Yahoo falhou para ${ticker}; tentando brapi`, { error: error.message })
+  }
+  return brapiQuote(ticker)
+}
+
 app.use('*', cors())
 const isApiPath = (path: string) => path === '/health' || path.startsWith('/api/')
 
@@ -285,10 +304,7 @@ app.get('/api/quote/:ticker', async (c) => {
   }
 
   try {
-    const { value: quote, cached } = await quoteCache.getOrLoad(`quote:${ticker}`, async () => {
-      const result = await fetchWithRetry(() => yahooFinance.quote(ticker), 2, 500) as Record<string, any>
-      return !result || result.regularMarketPrice === undefined ? null : result
-    })
+    const { value: quote, cached } = await quoteCache.getOrLoad(`quote:${ticker}`, () => fetchQuoteWithFallback(ticker))
 
     if (!quote) {
       return c.json({ error: 'Ticker not found', code: 'NOT_FOUND' }, 404)
@@ -481,10 +497,7 @@ function barsSince(bars: DailyBar[], days: number): DailyBar[] {
 
 /** Cotação recente (cache de 30 s, deduplicada); `null` se o ticker não existe. */
 async function fetchLiveQuote(ticker: string): Promise<any | null> {
-  const { value } = await liveQuoteCache.getOrLoad(`q:${ticker}`, async () => {
-    const quote = await fetchWithTimeout(fetchWithRetry(() => yahooFinance.quote(ticker), 2, 500), 10000) as any
-    return !quote || quote.regularMarketPrice === undefined ? null : quote
-  })
+  const { value } = await liveQuoteCache.getOrLoad(`q:${ticker}`, () => fetchQuoteWithFallback(ticker))
   return value
 }
 

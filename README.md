@@ -59,7 +59,7 @@ Metodologia, premissas e limitações: [`docs/METODOLOGIA.md`](docs/METODOLOGIA.
 ## Stack
 
 - **Frontend:** Vite, TypeScript e Tailwind CSS v4, com tema claro/escuro por variáveis CSS
-- **Backend:** Bun, Hono, Yahoo Finance (preços e fundamentos), BCB (CDI) e CVM
+- **Backend:** Bun, Hono, Yahoo Finance (preços e fundamentos), BCB (CDI), CVM e brapi.dev (fallback de cotações)
 - **IA:** LiteLLM (opcional, limitada pela guarda de fatos) e modelo XGBoost em Python
 - **Deploy:** Docker e ArgoCD em K3s
 
@@ -114,6 +114,7 @@ Copie `.env.example` para `.env`. Nunca versione o `.env` real; em produção in
 | `LITELLM_API_KEY` | — | Virtual key do LiteLLM. Sem ela, a análise usa fallback local. |
 | `LLM_MODEL` | `cloud/auto` | Alias do modelo no LiteLLM. |
 | `FAST_NEWS_URL` | — | Base URL do fast-news (`/api/rag/search?q=...`). |
+| `BRAPI_TOKEN` | - | Token do brapi.dev para o fallback de cotações da B3 quando o Yahoo falha; sem ele, só os tickers de demonstração do provedor respondem. |
 | `MARKET_NEWS_FEEDS` | — | Feeds RSS/Atom de mercado, separados por vírgula. |
 | `PAPER_FEEDS` | — | Feeds de papers; vazio usa a busca padrão do arXiv. |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | — | Habilitam envio diário, alertas e bot. |
@@ -210,6 +211,7 @@ Leia antes de confiar em qualquer número.
 - **Viés de sobrevivência:** o universo padrão é a lista atual de ações. Empresas que saíram do mercado não entram no backtest, o que tende a embelezar resultados. Mitigue enviando o pertencimento histórico em `PUT /api/universe/history`.
 - **Fundamentos do Yahoo são um retrato do presente**, não ponto-no-tempo. Por isso o backtest padrão testa só fatores de preço. Para valor/qualidade sem look-ahead, sincronize a CVM (`POST /api/fundamentals/cvm/sync`, formato ainda não validado contra download real) ou envie CSV com `availableAt`.
 - **Dados de terceiros** podem estar errados, atrasados ou indisponíveis. A API responde 503 em vez de inventar números.
+- **O fallback de cotações (brapi) é parcial.** Ele cobre só o preço atual de ações e FIIs quando o Yahoo falha; histórico, fundamentos, cripto e índice continuam sem alternativa, e sem `BRAPI_TOKEN` só os tickers de demonstração do provedor respondem.
 - **Backtest vale para os dados e parâmetros testados.** Sharpe deflacionado e PBO ajudam, mas não eliminam o ajuste ao passado.
 - **IR e custos são modelos simplificados.** Confirme regras fiscais com um contador.
 - **Sem autenticação.** Rotas de escrita bloqueiam outra origem, mas não exponha o serviço na internet sem proxy autenticado se IPS e diário forem sensíveis.
