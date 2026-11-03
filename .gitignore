@@ -145,3 +145,8 @@ vite.config.ts.timestamp-*
 # Python
 __pycache__/
 *.pyc
+
+# Snapshots e lixo de automação
+/portfolio.json
+core/bun_output.txt
+.jules-verified*
