@@ -45,6 +45,7 @@ Metodologia, premissas e limitações: [`../docs/METODOLOGIA.md`](../docs/METODO
 - `FAST_NEWS_URL`
 - `MARKET_NEWS_FEEDS`
 - `PAPER_FEEDS`
+- `BRAPI_TOKEN` (opcional; fallback de cotações da B3 quando o Yahoo falha)
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
 - `NOTIFY_UTC_HOUR`
@@ -61,6 +62,7 @@ bun test
 ## Desempenho e cache
 
 - Cotações do radar vêm numa única chamada em lote ao Yahoo; o histórico diário (1 ano) é baixado uma vez por ticker e alimenta RSI, variação 30d, `/api/predict` e Monte Carlo.
+- Se o Yahoo falhar numa cotação, o brapi.dev entra como fallback (`brapi.ts`) para ações e FIIs e o resultado é cacheado normalmente; histórico, fundamentos, cripto e índice não têm fallback. Fora os tickers de demonstração, o fallback exige `BRAPI_TOKEN`.
 - Caches em memória (`cache.ts`) com TTL e deduplicação de cargas simultâneas: cotação 30 s, snapshot 30 s, barras 15 min, `/api/portfolio` 2 min, `/api/analyze` 3 min (por ticker). Isso inclui a chamada ao LLM, que é a parte mais lenta.
 - `quant/data.ts` guarda o maior período já baixado por ticker e serve períodos menores como fatias; falhas de download são lembradas por 45 s para não martelar o provedor.
 - O backtest memoiza os fatores de preço por (ticker, t) dentro do mesmo painel; não altera resultados nem introduz look-ahead.
