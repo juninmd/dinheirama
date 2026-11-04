@@ -10,7 +10,7 @@ Projeto pessoal e educacional de pesquisa quantitativa para ações da B3. **Nad
 
 | Camada | Tecnologia |
 |---|---|
-| Backend (`core/`) | Bun + Hono + TypeScript; dados do Yahoo Finance, BCB e CVM |
+| Backend (`core/`) | Bun + Hono + TypeScript; dados do Yahoo Finance, BCB e CVM, com brapi.dev como fallback de cotações |
 | Frontend (`web/`) | Vite + TypeScript vanilla + Tailwind CSS v4, sem framework |
 | Treino (`core/training/`) | Python + XGBoost, opcional |
 | Deploy | Docker + ArgoCD (GitOps) em K3s; CI no GitHub Actions |
@@ -20,6 +20,7 @@ Projeto pessoal e educacional de pesquisa quantitativa para ações da B3. **Nad
 ```
 core/
   index.ts          API Hono: radar, análise, Monte Carlo, alertas
+  brapi.ts          fallback de cotações da B3 (brapi.dev) quando o Yahoo falha
   quant/            fatores, backtest, carteira, estresse, IPS, diário, guarda do LLM
   training/         coleta e treino (splits.py = divisão temporal com purga)
 web/src/
