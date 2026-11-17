@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { createLlm, llmConfigFromEnv } from './llm'
+import { createCachedLlm, createLlm, llmConfigFromEnv } from './llm'
 
 function fakeFetch(status: number, body: unknown) {
   const calls: { url: string; init: RequestInit }[] = []
@@ -40,5 +40,36 @@ describe('llm', () => {
     const { fn } = fakeFetch(200, { choices: [{ message: { content: '  ' } }] })
     const llm = createLlm({ baseUrl: 'http://proxy/v1', apiKey: 'k', model: 'cloud/auto' }, fn)
     await expect(llm.generate('p')).rejects.toThrow('empty completion')
+  })
+})
+
+describe('llm limits and cache', () => {
+  test('sends max_tokens, low reasoning effort and an abort signal', async () => {
+    const { fn, calls } = fakeFetch(200, { choices: [{ message: { content: 'ok' } }] })
+    await createLlm(llmConfigFromEnv({ LLM_MAX_TOKENS: '900' }), fn).generate('p')
+    const sent = JSON.parse(calls[0]!.init.body as string)
+    expect(sent.max_tokens).toBe(900)
+    expect(sent.reasoning_effort).toBe('low')
+    expect(calls[0]!.init.signal).toBeInstanceOf(AbortSignal)
+  })
+
+  test('cached llm calls upstream once per prompt until the ttl expires', async () => {
+    let calls = 0
+    let clock = 0
+    const inner = { generate: async (p: string) => `r${++calls}:${p}` }
+    const llm = createCachedLlm(inner, { ttlMs: 100, now: () => clock })
+    const [a, b] = await Promise.all([llm.generate('x'), llm.generate('x')])
+    expect([a, b, calls]).toEqual(['r1:x', 'r1:x', 1])
+    expect(await llm.generate('x')).toBe('r1:x')
+    clock = 101
+    expect(await llm.generate('x')).toBe('r2:x')
+  })
+
+  test('failures are not cached', async () => {
+    let fail = true
+    const llm = createCachedLlm({ generate: async () => { if (fail) throw new Error('down'); return 'ok' } })
+    await expect(llm.generate('x')).rejects.toThrow('down')
+    fail = false
+    expect(await llm.generate('x')).toBe('ok')
   })
 })

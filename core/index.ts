@@ -7,7 +7,7 @@ import YahooFinance from 'yahoo-finance2'
 const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] })
 import { CacheManager, mapPool } from './cache.ts'
 import { createBrapiQuoteSource } from './brapi.ts'
-import { createLlm, llmConfigFromEnv } from './llm'
+import { createCachedLlm, createLlm, llmConfigFromEnv } from './llm'
 import { initModel, predict, reloadModel, isModelLoaded } from './training/serve'
 import type { FeatureVector, ModelPrediction } from './training/serve'
 import {
@@ -30,6 +30,7 @@ import type { UniverseHistory } from './quant/universe.ts'
 import { Journal } from './quant/journal.ts'
 import { type FactLine, guardedExplain } from './quant/llm-guard.ts'
 import { IpsStore, loadPit, loadUniverseHistory, registerQuantRoutes } from './quant/routes.ts'
+import { adminWriteGuard } from './admin-guard.ts'
 import { type FactorTableRow, createQuantService } from './quant/service.ts'
 
 const app = new Hono()
@@ -37,6 +38,8 @@ const app = new Hono()
 // JSON da API é verboso e muito compressível (backtest/fatores passam de 100 kB); estáticos já saem pré-comprimidos.
 // Fica antes de registerQuantRoutes: no Hono, middleware só cobre rotas registradas depois dele.
 app.use('/api/*', compress())
+// Escritas exigem ADMIN_TOKEN; sem ele configurado, ficam fechadas. /api/analyze só lê (e tem cache).
+app.use('/api/*', adminWriteGuard({ publicWrites: ['/api/analyze'] }))
 
 const tickerSchema = z.string().regex(/^[A-Z0-9]{4,6}\.[A-Z]{2}$/, 'Invalid B3 ticker format (ex: PETR4.SA)')
 
@@ -176,8 +179,11 @@ function log(level: 'info' | 'warn' | 'error', message: string, data?: Record<st
   console.log(JSON.stringify(logEntry))
 }
 
+if (!process.env.ADMIN_TOKEN) log('warn', 'ADMIN_TOKEN não configurado: escritas da API respondem 403')
+
 const llmConfig = llmConfigFromEnv()
-const llm = createLlm(llmConfig)
+// Cache por prompt: explicações são montadas de números determinísticos.
+const llm = createCachedLlm(createLlm(llmConfig))
 
 // ---- Camada quantitativa (fatores, backtest, carteira robusta, IPS, diário) ----
 const QUANT_RISK_FREE = Number(process.env.MC_RISK_FREE_RATE ?? 0.105)
@@ -397,7 +403,7 @@ app.post('/api/analyze', async (c) => {
       ].join('\n')
 
       const guarded = await guardedExplain(
-        { generate: prompt => fetchWithTimeout(llm.generate(prompt), 300000) },
+        llm,
         `Análise educacional de ${snapshot.ticker}`,
         facts,
         fallbackText
@@ -672,7 +678,7 @@ async function computePortfolio() {
     ].join('\n')
 
     const guarded = await guardedExplain(
-      { generate: prompt => fetchWithTimeout(llm.generate(prompt), 300000) },
+      llm,
       'Radar educacional de ações da B3',
       facts,
       fallbackText
