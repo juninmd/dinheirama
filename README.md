@@ -115,7 +115,7 @@ Copie `.env.example` para `.env`. Nunca versione o `.env` real; em produção in
 | `LLM_MODEL` | `cloud/auto` | Alias do modelo no LiteLLM. |
 | `LLM_MAX_TOKENS` | `2048` | Teto de saída por chamada. |
 | `LLM_TIMEOUT_MS` | `60000` | Teto de espera; ao estourar, a chamada é cancelada e entra o texto determinístico. |
-| `ADMIN_TOKEN` | vazio | Exigido (Bearer ou `x-admin-token`) em toda escrita da API, exceto `POST /api/analyze`. Vazio: escritas abertas, mas `/api/training/*` (roda comandos no servidor) fica fechado. O painel pede o token uma vez e guarda no navegador. |
+| `ADMIN_TOKEN` | vazio | Exigido (Bearer ou `x-admin-token`) em toda escrita da API, exceto `POST /api/analyze`. Vazio: escritas respondem 403. O painel pede o token uma vez e guarda no navegador. |
 | `FAST_NEWS_URL` | — | Base URL do fast-news (`/api/rag/search?q=...`). |
 | `BRAPI_TOKEN` | - | Token do brapi.dev para o fallback de cotações da B3 quando o Yahoo falha; sem ele, só os tickers de demonstração do provedor respondem. |
 | `MARKET_NEWS_FEEDS` | — | Feeds RSS/Atom de mercado, separados por vírgula. |

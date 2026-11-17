@@ -38,8 +38,8 @@ const app = new Hono()
 // JSON da API é verboso e muito compressível (backtest/fatores passam de 100 kB); estáticos já saem pré-comprimidos.
 // Fica antes de registerQuantRoutes: no Hono, middleware só cobre rotas registradas depois dele.
 app.use('/api/*', compress())
-// Escritas exigem ADMIN_TOKEN quando configurado; treino (roda comandos no servidor) nunca fica aberto.
-app.use('/api/*', adminWriteGuard({ publicWrites: ['/api/analyze'], alwaysProtected: ['/api/training'] }))
+// Escritas exigem ADMIN_TOKEN; sem ele configurado, ficam fechadas. /api/analyze só lê (e tem cache).
+app.use('/api/*', adminWriteGuard({ publicWrites: ['/api/analyze'] }))
 
 const tickerSchema = z.string().regex(/^[A-Z0-9]{4,6}\.[A-Z]{2}$/, 'Invalid B3 ticker format (ex: PETR4.SA)')
 
@@ -179,7 +179,7 @@ function log(level: 'info' | 'warn' | 'error', message: string, data?: Record<st
   console.log(JSON.stringify(logEntry))
 }
 
-if (!process.env.ADMIN_TOKEN) log('warn', 'ADMIN_TOKEN não configurado: escritas da API estão abertas (exceto /api/training)')
+if (!process.env.ADMIN_TOKEN) log('warn', 'ADMIN_TOKEN não configurado: escritas da API respondem 403')
 
 const llmConfig = llmConfigFromEnv()
 // Cache por prompt: explicações são montadas de números determinísticos.

@@ -4,7 +4,7 @@ import { adminWriteGuard } from './admin-guard.ts'
 
 function appWith(token: string | undefined) {
   const app = new Hono()
-  app.use('/api/*', adminWriteGuard({ token: () => token, publicWrites: ['/api/analyze'], alwaysProtected: ['/api/training'] }))
+  app.use('/api/*', adminWriteGuard({ token: () => token, publicWrites: ['/api/analyze'] }))
   app.all('/api/*', c => c.json({ ok: true }))
   return app
 }
@@ -26,10 +26,12 @@ describe('adminWriteGuard', () => {
     expect((await req(app, 'POST', '/api/analyze')).status).toBe(200)
   })
 
-  test('sem ADMIN_TOKEN: treino (roda comandos) fica fechado; o resto segue aberto', async () => {
+  test('sem ADMIN_TOKEN configurado: escritas fechadas (403), leitura e /api/analyze abertas', async () => {
     const app = appWith(undefined)
     expect((await req(app, 'POST', '/api/training/collect')).status).toBe(403)
-    expect((await req(app, 'POST', '/api/training/retrain')).status).toBe(403)
-    expect((await req(app, 'POST', '/api/alerts')).status).toBe(200)
+    expect((await req(app, 'POST', '/api/alerts')).status).toBe(403)
+    expect((await req(app, 'PUT', '/api/ips', { 'x-admin-token': 'qualquer' })).status).toBe(403)
+    expect((await req(app, 'GET', '/api/alerts')).status).toBe(200)
+    expect((await req(app, 'POST', '/api/analyze')).status).toBe(200)
   })
 })
