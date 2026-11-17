@@ -7,7 +7,7 @@ import YahooFinance from 'yahoo-finance2'
 const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] })
 import { CacheManager, mapPool } from './cache.ts'
 import { createBrapiQuoteSource } from './brapi.ts'
-import { createLlm, llmConfigFromEnv } from './llm'
+import { createCachedLlm, createLlm, llmConfigFromEnv } from './llm'
 import { initModel, predict, reloadModel, isModelLoaded } from './training/serve'
 import type { FeatureVector, ModelPrediction } from './training/serve'
 import {
@@ -177,7 +177,8 @@ function log(level: 'info' | 'warn' | 'error', message: string, data?: Record<st
 }
 
 const llmConfig = llmConfigFromEnv()
-const llm = createLlm(llmConfig)
+// Cache por prompt: explicações são montadas de números determinísticos.
+const llm = createCachedLlm(createLlm(llmConfig))
 
 // ---- Camada quantitativa (fatores, backtest, carteira robusta, IPS, diário) ----
 const QUANT_RISK_FREE = Number(process.env.MC_RISK_FREE_RATE ?? 0.105)
@@ -397,7 +398,7 @@ app.post('/api/analyze', async (c) => {
       ].join('\n')
 
       const guarded = await guardedExplain(
-        { generate: prompt => fetchWithTimeout(llm.generate(prompt), 300000) },
+        llm,
         `Análise educacional de ${snapshot.ticker}`,
         facts,
         fallbackText
@@ -672,7 +673,7 @@ async function computePortfolio() {
     ].join('\n')
 
     const guarded = await guardedExplain(
-      { generate: prompt => fetchWithTimeout(llm.generate(prompt), 300000) },
+      llm,
       'Radar educacional de ações da B3',
       facts,
       fallbackText

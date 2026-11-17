@@ -113,6 +113,8 @@ Copie `.env.example` para `.env`. Nunca versione o `.env` real; em produção in
 | `LITELLM_BASE_URL` | `http://litellm.ai.svc.cluster.local:4000/v1` | Proxy LiteLLM (API compatível com OpenAI). |
 | `LITELLM_API_KEY` | — | Virtual key do LiteLLM. Sem ela, a análise usa fallback local. |
 | `LLM_MODEL` | `cloud/auto` | Alias do modelo no LiteLLM. |
+| `LLM_MAX_TOKENS` | `2048` | Teto de saída por chamada. |
+| `LLM_TIMEOUT_MS` | `60000` | Teto de espera; ao estourar, a chamada é cancelada e entra o texto determinístico. |
 | `FAST_NEWS_URL` | — | Base URL do fast-news (`/api/rag/search?q=...`). |
 | `BRAPI_TOKEN` | - | Token do brapi.dev para o fallback de cotações da B3 quando o Yahoo falha; sem ele, só os tickers de demonstração do provedor respondem. |
 | `MARKET_NEWS_FEEDS` | — | Feeds RSS/Atom de mercado, separados por vírgula. |
