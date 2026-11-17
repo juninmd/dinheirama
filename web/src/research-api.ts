@@ -49,6 +49,24 @@ function fromResponse(status: number, body: unknown, labels: FieldLabels): ApiEr
   return new ApiError(message, status, code, issueLines(data.issues, labels))
 }
 
+const ADMIN_TOKEN_KEY = 'dinheiramaAdminToken'
+
+function readAdminToken(): string {
+  try {
+    return localStorage.getItem(ADMIN_TOKEN_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function saveAdminToken(token: string): void {
+  try {
+    localStorage.setItem(ADMIN_TOKEN_KEY, token)
+  } catch {
+    // sem storage: vale só para esta requisição
+  }
+}
+
 export async function apiJson<T>(path: string, init: RequestInit = {}, options: { timeoutMs?: number; labels?: FieldLabels } = {}): Promise<T> {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     throw new ApiError('Você está offline. Reconecte-se e tente novamente.', 0, 'OFFLINE')
@@ -59,11 +77,24 @@ export async function apiJson<T>(path: string, init: RequestInit = {}, options: 
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (init.body !== undefined && init.body !== null) headers['Content-Type'] = 'application/json'
 
+  const method = (init.method ?? 'GET').toUpperCase()
+  const adminToken = method === 'GET' ? '' : readAdminToken()
+  if (adminToken) headers['x-admin-token'] = adminToken
+
   let status = 0
   let ok = false
   let text = ''
   try {
-    const res = await fetch(path, { ...init, headers: { ...headers, ...(init.headers as Record<string, string> | undefined) }, signal: controller.signal })
+    let res = await fetch(path, { ...init, headers: { ...headers, ...(init.headers as Record<string, string> | undefined) }, signal: controller.signal })
+    // Escrita recusada por falta de token: pede uma vez, guarda neste navegador e repete.
+    if (res.status === 401 && method !== 'GET' && typeof window !== 'undefined') {
+      const typed = window.prompt('Token de admin do Dinheirama:')?.trim()
+      if (typed) {
+        saveAdminToken(typed)
+        headers['x-admin-token'] = typed
+        res = await fetch(path, { ...init, headers: { ...headers, ...(init.headers as Record<string, string> | undefined) }, signal: controller.signal })
+      }
+    }
     status = res.status
     ok = res.ok
     text = await res.text()
