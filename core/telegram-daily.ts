@@ -1,4 +1,5 @@
 import { buildPortfolio } from './index.ts'
+import { postTelegram } from './telegram-retry.ts'
 
 // Envia o radar diario do Dinheirama para o Telegram, reusando o motor de /api/portfolio.
 // Rodar uma vez: bun run telegram-daily.ts (ou bun run notify).
@@ -37,15 +38,11 @@ export function formatMessage(result: Awaited<ReturnType<typeof buildPortfolio>>
 
 export async function sendTelegram(text: string, chatId: string | number = CHAT_ID!, parseMode: 'HTML' | null = 'HTML'): Promise<void> {
   if (!BOT_TOKEN || !chatId) throw new Error('Faltam TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID')
-  const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      ...(parseMode ? { parse_mode: parseMode } : {}),
-      disable_web_page_preview: true,
-    }),
+  const res = await postTelegram(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    chat_id: chatId,
+    text,
+    ...(parseMode ? { parse_mode: parseMode } : {}),
+    disable_web_page_preview: true,
   })
   if (!res.ok) throw new Error(`Telegram status ${res.status}: ${await res.text()}`)
 }
