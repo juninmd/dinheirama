@@ -47,26 +47,45 @@ function ensureDirExists() {
   }
 }
 
+// Write to a temp file and rename: a crash mid-write must never leave a truncated JSON that wipes every alert.
+function writeJsonAtomic(file: string, data: unknown): void {
+  const tmp = `${file}.${process.pid}.tmp`
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf-8')
+  fs.renameSync(tmp, file)
+}
+
+// Keep an unreadable file aside so the next save does not overwrite the user's data.
+function quarantine(file: string): void {
+  try {
+    fs.renameSync(file, `${file}.corrupt-${Date.now()}`)
+  } catch (err) {
+    console.error('[alerts] Could not quarantine corrupt file:', err)
+  }
+}
+
+function readJsonArray<T>(file: string): T[] {
+  if (!fs.existsSync(file)) return []
+  try {
+    const parsed: unknown = JSON.parse(fs.readFileSync(file, 'utf-8'))
+    if (Array.isArray(parsed)) return parsed as T[]
+    throw new Error('expected a JSON array')
+  } catch (err) {
+    console.error(`[alerts] Error reading ${path.basename(file)}, moving it aside:`, err)
+    quarantine(file)
+    return []
+  }
+}
+
 export function loadAlerts(): Alert[] {
   ensureDirExists()
-  try {
-    if (fs.existsSync(ALERTS_FILE)) {
-      const raw = fs.readFileSync(ALERTS_FILE, 'utf-8')
-      alertsCache = JSON.parse(raw)
-    } else {
-      alertsCache = []
-    }
-  } catch (err) {
-    console.error('[alerts] Error reading alerts file, resetting:', err)
-    alertsCache = []
-  }
+  alertsCache = readJsonArray<Alert>(ALERTS_FILE)
   return alertsCache
 }
 
 export function saveAlerts(): void {
   ensureDirExists()
   try {
-    fs.writeFileSync(ALERTS_FILE, JSON.stringify(alertsCache, null, 2), 'utf-8')
+    writeJsonAtomic(ALERTS_FILE, alertsCache)
   } catch (err) {
     console.error('[alerts] Error writing alerts file:', err)
   }
@@ -74,24 +93,14 @@ export function saveAlerts(): void {
 
 export function loadHistory(): AlertHistory[] {
   ensureDirExists()
-  try {
-    if (fs.existsSync(HISTORY_FILE)) {
-      const raw = fs.readFileSync(HISTORY_FILE, 'utf-8')
-      historyCache = JSON.parse(raw)
-    } else {
-      historyCache = []
-    }
-  } catch (err) {
-    console.error('[alerts] Error reading history file:', err)
-    historyCache = []
-  }
+  historyCache = readJsonArray<AlertHistory>(HISTORY_FILE)
   return historyCache
 }
 
 export function saveHistory(): void {
   ensureDirExists()
   try {
-    fs.writeFileSync(HISTORY_FILE, JSON.stringify(historyCache, null, 2), 'utf-8')
+    writeJsonAtomic(HISTORY_FILE, historyCache)
   } catch (err) {
     console.error('[alerts] Error writing history file:', err)
   }
