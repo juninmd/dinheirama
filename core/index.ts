@@ -19,6 +19,7 @@ import {
   clearHistory,
   startAlertsCheckLoop
 } from './alerts-manager.ts'
+import { parseAlertInput } from './alert-input.ts'
 import { optimizePortfolio, simulateAsset } from './monte-carlo.ts'
 import type { AssetSeries, McAssetResult, McEngine, McPortfolioResult } from './monte-carlo.ts'
 import { MARKET_UNIVERSE } from './quant/universe.ts'
@@ -985,18 +986,11 @@ app.get('/api/alerts', (c) => {
 
 app.post('/api/alerts', async (c) => {
   try {
-    const body = await c.req.json()
-    const { ticker, type, condition, value } = body
-    if (!ticker || !type || !condition || value === undefined) {
-      return c.json({ error: 'Missing required alert fields' }, 400)
+    const input = parseAlertInput(await c.req.json().catch(() => null))
+    if (!input.ok) {
+      return c.json({ error: input.error, code: 'INVALID_ALERT' }, 400)
     }
-    const newAlert = addAlert({
-      ticker: String(ticker).toUpperCase().trim(),
-      type,
-      condition,
-      value
-    })
-    return c.json(newAlert)
+    return c.json(addAlert(input.value))
   } catch (err: any) {
     return c.json({ error: err.message }, 500)
   }
