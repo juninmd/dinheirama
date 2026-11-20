@@ -67,6 +67,7 @@ export function createAnalyzeView(): View {
   })
 
   function idle(): void {
+    setBusy(submit, false)
     out.replaceChildren(
       emptyState({
         icon: 'search',
@@ -82,6 +83,9 @@ export function createAnalyzeView(): View {
     const mine = ++token
     const hit = cache.get(ticker)
     if (hit && !force && Date.now() - hit.at < 5 * 60_000) {
+      // Uma análise lenta pode estar em andamento: o token novo a torna obsoleta e o finally dela
+      // não destrava mais o botão, então destrava aqui.
+      setBusy(submit, false)
       render(hit.data, mine)
       return
     }
