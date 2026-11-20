@@ -48,6 +48,14 @@ function saveWatchlist(items: WatchlistItem[]): void {
   for (const fn of watchlistListeners) fn()
 }
 
+// Outra aba mudou a lista (ou limpou o storage): sem descartar o cache, o próximo
+// add/remove desta aba gravaria a versão antiga por cima e apagaria a mudança da outra.
+window.addEventListener('storage', event => {
+  if (event.key !== null && event.key !== WATCHLIST_KEY) return
+  watchlistCache = null
+  for (const fn of watchlistListeners) fn()
+})
+
 export const watchlist = {
   get: (): WatchlistItem[] => loadWatchlist(),
   has: (ticker: string): boolean => loadWatchlist().some(i => i.ticker === ticker),
