@@ -25,6 +25,7 @@ import {
 import { type PboResult, type WalkForwardSelection, probabilityOfBacktestOverfitting, walkForwardSelect } from './validation.ts'
 import { type UniverseAsset, type UniverseHistory } from './universe.ts'
 import { type ValuationResult, valueAsset } from './valuation.ts'
+import { mapPool } from '../cache.ts'
 
 export interface QuantDeps {
   data: MarketData
@@ -130,12 +131,6 @@ function memoAsync<T>(ttlMs: number, fn: () => Promise<T>, nullTtlMs = 60_000): 
   }
 }
 
-async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const out: R[] = []
-  for (let i = 0; i < items.length; i += limit) out.push(...(await Promise.all(items.slice(i, i + limit).map(fn))))
-  return out
-}
-
 function trailingRf12m(loaded: LoadedPanel, riskFreeAnnual: number): number {
   if (!loaded.cdiDaily) return riskFreeAnnual
   let acc = 1
@@ -158,7 +153,7 @@ export function createQuantService(deps: QuantDeps) {
 
     const alive = panel.tickers.filter(tk => typeof (panel.close[tk] as Array<number | null>)[t] === 'number')
     const funds = new Map<string, Fundamentals | null>()
-    await mapLimit(alive, 4, async tk => {
+    await mapPool(alive, 4, async tk => {
       funds.set(tk, await data.fundamentals(tk, byTicker.get(tk)?.isFinancial))
     })
 
