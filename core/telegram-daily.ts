@@ -1,5 +1,6 @@
 import { buildPortfolio } from './index.ts'
 import { postTelegram } from './telegram-retry.ts'
+import { escapeHtml, escapeHtmlClipped } from './telegram-html.ts'
 
 // Envia o radar diario do Dinheirama para o Telegram, reusando o motor de /api/portfolio.
 // Rodar uma vez: bun run telegram-daily.ts (ou bun run notify).
@@ -7,10 +8,6 @@ import { postTelegram } from './telegram-retry.ts'
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
 
 export function formatMessage(result: Awaited<ReturnType<typeof buildPortfolio>>): string {
   const date = new Date().toLocaleDateString('pt-BR')
@@ -30,7 +27,7 @@ export function formatMessage(result: Awaited<ReturnType<typeof buildPortfolio>>
     `<b>Ranking por fatores — top 5 de ${result.tickersAnalyzed} ativos analisados:</b>`,
     ...lines,
     '',
-    escapeHtml(result.recommendation).slice(0, 2500),
+    escapeHtmlClipped(result.recommendation, 2500),
     '',
     `<i>Fonte IA: ${result.aiSource}. Projeto pessoal e educacional; não é recomendação de investimento. Valide notícias, papers e risco antes de operar.</i>`,
   ].join('\n')
