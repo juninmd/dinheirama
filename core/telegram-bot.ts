@@ -1,5 +1,6 @@
 import { buildPortfolio } from './index.ts'
 import { formatMessage, sendTelegram } from './telegram-daily.ts'
+import { escapeHtml, escapeHtmlClipped } from './telegram-html.ts'
 import { getAlerts, addAlert, deleteAlert } from './alerts-manager.ts'
 
 // Bot interativo do Dinheirama: escuta comandos no Telegram via long-polling (getUpdates)
@@ -30,10 +31,6 @@ const HELP = [
   '<i>Uso educacional. Não é recomendação formal de investimento.</i>',
 ].join('\n')
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
-
 function normalizeTicker(raw: string): string {
   return raw.trim().toUpperCase()
 }
@@ -61,7 +58,7 @@ async function handleAnalyze(chatId: number, ticker: string): Promise<void> {
     d.mlPrediction ? `ML: ${d.mlPrediction.label ?? d.mlPrediction.action ?? JSON.stringify(d.mlPrediction)}` : '',
     '',
   ].filter(Boolean).join('\n')
-  const analysis = escapeHtml(String(d.analysis || '')).slice(0, 3500)
+  const analysis = escapeHtmlClipped(String(d.analysis || ''), 3500)
   await sendTelegram(`${header}${analysis}\n\n<i>Fonte: ${d.aiSource}. Não é recomendação formal.</i>`, chatId)
 }
 
