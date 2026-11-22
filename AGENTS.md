@@ -1,76 +1,69 @@
 # AGENTS.md
 
-Guia para agentes (e pessoas) que alteram este repositório.
+Guide for agents and people who change this repository.
 
-## Regra zero
+## Rule zero
 
-Projeto pessoal e educacional de pesquisa quantitativa para ações da B3. **Nada aqui é recomendação de investimento.** Mantenha esse aviso no README, na UI (fixo em todas as telas), no Telegram e em qualquer texto gerado por IA. Nunca escreva copy que prometa retorno, diga "compre/venda" ou trate score como previsão.
+This is a personal, educational quantitative research project for B3 stocks. **Nothing here is investment advice.** Keep this notice in the README, in the UI (fixed on every screen), in Telegram messages, and in any AI-generated text. Never write copy that promises returns, says "buy" or "sell", or treats a score as a forecast.
 
 ## Stack
 
-| Camada | Tecnologia |
+| Layer | Technology |
 |---|---|
-| Backend (`core/`) | Bun + Hono + TypeScript; dados do Yahoo Finance, BCB e CVM, com brapi.dev como fallback de cotações |
-| Frontend (`web/`) | Vite + TypeScript vanilla + Tailwind CSS v4, sem framework |
-| Treino (`core/training/`) | Python + XGBoost, opcional |
-| Deploy | Docker + ArgoCD (GitOps) em K3s; CI no GitHub Actions |
+| Backend (`core/`) | Bun + Hono + TypeScript. Data from Yahoo Finance, BCB and CVM, with brapi.dev as the quote fallback |
+| Frontend (`web/`) | Vite + vanilla TypeScript + Tailwind CSS v4, no framework |
+| Training (`core/training/`) | Python + XGBoost, optional |
+| Deploy | Docker + ArgoCD (GitOps) on K3s. CI on GitHub Actions |
 
-## Mapa do repositório
+## Structure
 
-```
-core/
-  index.ts          API Hono: radar, análise, Monte Carlo, alertas
-  brapi.ts          fallback de cotações da B3 (brapi.dev) quando o Yahoo falha
-  quant/            fatores, backtest, carteira, estresse, IPS, diário, guarda do LLM
-  training/         coleta e treino (splits.py = divisão temporal com purga)
-web/src/
-  main.ts           shell: menu, barra superior, roteamento por hash
-  views/            uma view por tela (home, analyze, radar, montecarlo, news, training, alerts, quant)
-  ui/               componentes, gráficos SVG, ícones, toast, diálogo, paleta de busca
-  styles/           app.css (entrada), theme.css (tokens), base, components, visuals, quant
-  research-*.ts     abas da pesquisa quant
-docs/METODOLOGIA.md metodologia, premissas e limitações
-```
+- `core/index.ts`: Hono API (radar, analysis, Monte Carlo, alerts)
+- `core/brapi.ts`: B3 quote fallback when Yahoo fails
+- `core/quant/`: factors, backtest, portfolio, stress, IPS, journal, LLM guard
+- `core/training/`: collection and training. `splits.py` is the time split with purging
+- `web/src/main.ts`: shell (menu, top bar, hash routing). `views/`: one view per screen. `ui/`: components, SVG charts, icons, toast, dialog, search palette. `styles/`: `app.css` (entry), `theme.css` (tokens), and the rest
+- `web/src/research-*.ts`: quant research tabs
+- `docs/METODOLOGIA.md`: methodology, assumptions and limits
 
-## Comandos
+## Commands
 
 ```bash
-cd core && bun install && bun test       # testes offline (dados sintéticos em quant/test-helpers.ts)
-cd core && bun run start                 # API em :3000
-cd web && bun install && bun run build   # build do frontend (bun dev para desenvolver)
+cd core && bun install && bun test       # offline tests (synthetic data in quant/test-helpers.ts)
+cd core && bun run start                 # API on :3000
+cd web && bun install && bun run build   # frontend build (use `bun run dev` while developing)
 cd core/training && python3 -m unittest test_splits
 ```
 
-Rode os testes do pacote que você tocou antes de commitar.
+Run the tests of every package you touched before you commit.
 
-## Regras da camada quant
+## Quant layer rules
 
-- Sem look-ahead: sinal em `t`, execução em `t+1`.
-- Fundamentos só ponto-no-tempo em backtest (`availableAt <= data`).
-- Pesos de fatores não são ajustados ao passado.
-- Dado ausente nunca vira zero: reduz cobertura ou responde 503.
-- Todo resultado mostra custos, IR e ressalvas.
-- `quant/factors.ts` é compartilhado entre backtest e score ao vivo. Não duplique a lógica.
-- Mudança em estratégia ou fator precisa de teste que prove ausência de look-ahead (modelo: `quant/backtest.test.ts`).
-- A IA só explica números já calculados; `quant/llm-guard.ts` descarta resposta com número inventado ou promessa.
+- No look-ahead: a signal is computed at `t` and executed at `t+1`
+- Fundamentals are point-in-time in backtests (`availableAt <= data`)
+- Factor weights are not fitted to the past
+- Missing data never becomes zero. It lowers coverage or returns 503
+- Every result shows costs, IR and caveats
+- `quant/factors.ts` is shared by the backtest and the live score. Do not duplicate its logic
+- A change to a strategy or factor needs a test that proves no look-ahead (model: `quant/backtest.test.ts`)
+- The AI only explains numbers that were already computed. `quant/llm-guard.ts` drops any reply that has an invented number or a promise
 
-## Regras de frontend
+## Frontend rules
 
-- **CSS:** Tailwind v4. Layout e espaçamento em utilitários no markup; só o que se repete vira classe em `styles/components.css`.
-- **Tokens:** cores, raios e sombras vêm do tema (`bg-surface`, `text-fg-2`, `border-line`…). Nada de hex solto. Tema claro e escuro definidos em `styles/theme.css`.
-- **Classes dinâmicas:** o Tailwind só gera classes escritas por extenso. Proibido `` `text-${tone}` ``; use os mapas `TEXT_TONE` e `BG_TONE` de `ui/format.ts`.
-- **DOM seguro:** dado vindo da API entra por `h()`/`textContent`, nunca por `innerHTML`.
-- **Cor nunca é o único sinal:** acompanhe de ícone, sinal (+/−) ou texto.
-- **Acessibilidade:** foco visível, navegação por teclado, contraste mínimo 4.5:1, `prefers-reduced-motion` respeitado.
-- **Rotas:** cada tela tem URL de hash própria e compartilhável (`#/analisar/PETR4.SA`).
-- **Mobile primeiro:** barra inferior até 720px, trilho de ícones até 1100px, menu completo acima disso.
+- **CSS:** Tailwind v4. Layout and spacing are utilities in the markup. Only repeated patterns become classes in `styles/components.css`
+- **Tokens:** colors, radii and shadows come from the theme (`bg-surface`, `text-fg-2`, `border-line`, and so on). No loose hex values. Light and dark themes are defined in `styles/theme.css`
+- **Dynamic classes:** Tailwind only generates classes written out in full. Never build them from a template (`` `text-${tone}` ``). Use the `TEXT_TONE` and `BG_TONE` maps in `ui/format.ts`
+- **Safe DOM:** API data enters through `h()` or `textContent`, never `innerHTML`
+- **Color is never the only signal:** pair it with an icon, a sign (+/−) or text
+- **Accessibility:** visible focus, keyboard navigation, minimum contrast 4.5:1, `prefers-reduced-motion` respected
+- **Routes:** every screen has its own shareable hash URL (for example `#/analisar/PETR4.SA`)
+- **Mobile first:** bottom bar up to 720px, icon rail up to 1100px, full menu above that
 
-## Operação
+## Operations
 
-- Infraestrutura declarativa e GitOps com ArgoCD; não aplique mudanças à mão no cluster.
-- Não versione `.env`. `.env.example` é o contrato de configuração; em produção injete segredos via Secrets/ArgoCD.
-- Não deixe arquivos de marcação ou lixo de automação na raiz (por exemplo `.jules-verified*`).
-- Commits pequenos, mensagem no imperativo, e documentação atualizada junto com a mudança (README e `docs/METODOLOGIA.md`).
+- Infrastructure is declarative and GitOps with ArgoCD. Do not apply changes to the cluster by hand
+- Do not commit `.env`. `.env.example` is the configuration contract. In production, inject secrets through Kubernetes Secrets or ArgoCD
+- Do not leave marker or automation leftovers in the root (for example `.jules-verified*`)
+- Small commits with imperative messages. Update the docs in the same change (README and `docs/METODOLOGIA.md`)
 
 <!-- base-actions-main-policy -->
 ## GitHub Actions — padrão obrigatório (@main)
